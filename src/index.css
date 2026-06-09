@@ -1,0 +1,55 @@
+@import "tailwindcss";
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  font-family: 'Inter', system-ui, -apple-system, sans-serif;
+  background-color: #f1f5f9;
+  color: #1e293b;
+  -webkit-font-smoothing: antialiased;
+}
+
+#root {
+  min-height: 100vh;
+  width: 100%;
+}
+
+/* Custom scrollbar */
+::-webkit-scrollbar { width: 6px; height: 6px; }
+::-webkit-scrollbar-track { background: #f1f5f9; }
+::-webkit-scrollbar-thumb { background: #94a3b8; border-radius: 3px; }
+::-webkit-scrollbar-thumb:hover { background: #64748b; }
+
+/* Smooth transitions */
+.transition-all { transition: all 0.2s ease; }
+
+/* Severity badge colors */
+.badge-critical { background: #fee2e2; color: #dc2626; border: 1px solid #fecaca; }
+.badge-high { background: #ffedd5; color: #ea580c; border: 1px solid #fed7aa; }
+.badge-medium { background: #fef9c3; color: #ca8a04; border: 1px solid #fde68a; }
+.badge-low { background: #dcfce7; color: #16a34a; border: 1px solid #bbf7d0; }
+
+/* CAP status colors */
+.status-open { background: #fee2e2; color: #dc2626; }
+.status-inprogress { background: #dbeafe; color: #1d4ed8; }
+.status-pending { background: #fef9c3; color: #ca8a04; }
+.status-closed { background: #dcfce7; color: #16a34a; }
+
+/* Rolling image animation */
+@keyframes slideIn {
+  from { transform: translateX(100%); opacity: 0; }
+  to { transform: translateX(0); opacity: 1; }
+}
+.slide-in { animation: slideIn 0.5s ease; }
+
+/* Table hover */
+tr:hover td { background-color: #f8fafc; }
+
+/* Print styles */
+@media print {
+  .no-print { display: none !important; }
+  body { background: white; }
+}
