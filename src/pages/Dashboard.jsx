@@ -6,6 +6,52 @@ import {
 import { fetchDashboardStats, fetchRecentViolationsWithImages } from '../lib/api'
 import { SEVERITY_LEVELS, CAP_STATUSES, CATEGORY_COLORS, getSeverityConfig, getCapStatusConfig } from '../lib/constants'
 
+// ─── DEPT COMPARE CHART ───────────────────────────────────────────────────────
+function DeptCompareChart({ byDept }) {
+  const data = Object.entries(byDept)
+    .map(([dept, { total, closed }]) => ({
+      dept,
+      'Tổng': total,
+      'Đã đóng': closed,
+      'Chưa đóng': total - closed,
+    }))
+    .sort((a, b) => b['Tổng'] - a['Tổng'])
+
+  if (!data.length) return (
+    <div className="flex items-center justify-center h-40 text-slate-400 text-sm">Chưa có dữ liệu</div>
+  )
+
+  const CustomTooltipDept = ({ active, payload, label }) => {
+    if (!active || !payload?.length) return null
+    return (
+      <div className="bg-white border border-slate-200 rounded-lg p-2.5 shadow-lg text-xs">
+        <div className="font-bold text-slate-700 mb-1.5">{label}</div>
+        {payload.map(p => (
+          <div key={p.name} className="flex items-center gap-2">
+            <span className="w-2 h-2 rounded-full inline-block" style={{ background: p.fill }} />
+            <span className="text-slate-500">{p.name}:</span>
+            <span className="font-semibold" style={{ color: p.fill }}>{p.value}</span>
+          </div>
+        ))}
+      </div>
+    )
+  }
+
+  return (
+    <ResponsiveContainer width="100%" height={260}>
+      <BarChart data={data} margin={{ top: 5, right: 10, left: -20, bottom: 50 }}>
+        <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
+        <XAxis dataKey="dept" tick={{ fontSize: 10, fill: '#64748b' }} angle={-40} textAnchor="end" interval={0} />
+        <YAxis tick={{ fontSize: 11, fill: '#64748b' }} allowDecimals={false} />
+        <Tooltip content={<CustomTooltipDept />} />
+        <Legend iconSize={8} iconType="circle" wrapperStyle={{ fontSize: '11px', paddingTop: '8px' }} />
+        <Bar dataKey="Chưa đóng" stackId="a" fill="#ef4444" radius={[0,0,0,0]} />
+        <Bar dataKey="Đã đóng"   stackId="a" fill="#22c55e" radius={[4,4,0,0]} />
+      </BarChart>
+    </ResponsiveContainer>
+  )
+}
+
 // ─── KPI CARD ────────────────────────────────────────────────────────────────
 function KpiCard({ title, value, subtitle, color, icon, onClick }) {
   return (
@@ -402,17 +448,24 @@ export default function Dashboard({ onNavigate }) {
             </div>
           </div>
 
-          {/* LOWER ROW: Severity Pie + Dept Table */}
+          {/* LOWER ROW: Dept Compare + Severity Pie */}
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
+            {/* Dept Compare Chart */}
+            <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-4">
+              <h3 className="font-bold text-blue-900 text-sm mb-1">So sánh vi phạm theo bộ phận</h3>
+              <p className="text-xs text-slate-400 mb-2">Xanh = đã đóng · Đỏ = chưa đóng</p>
+              <DeptCompareChart byDept={stats.byDept} />
+            </div>
+
             {/* Severity Pie */}
             <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-4">
               <h3 className="font-bold text-blue-900 text-sm mb-2">Phân bố theo mức độ nghiêm trọng</h3>
               <SeverityPie bySeverity={stats.bySeverity} />
             </div>
-
-            {/* Dept CAP Table */}
-            <DeptCapTable byDept={stats.byDept} />
           </div>
+
+          {/* Dept CAP Rate Table */}
+          <DeptCapTable byDept={stats.byDept} />
         </>
       ) : null}
     </div>

@@ -233,20 +233,50 @@ export async function importFromGoogleSheet() {
 // =============================================
 
 export async function uploadEvidenceImage(file, violationId) {
-  const ext = file.name.split('.').pop()
-  const path = `evidence/${violationId}/${Date.now()}.${ext}`
+  // Sanitize filename: remove special chars, keep extension
+  const ext = (file.name.split('.').pop() || 'jpg').toLowerCase()
+  const safeName = `${Date.now()}.${ext}`
+  const path = `evidence/${violationId}/${safeName}`
 
   const { data, error } = await supabase.storage
     .from('hse-images')
-    .upload(path, file, { upsert: true })
+    .upload(path, file, {
+      upsert: true,
+      contentType: file.type || 'image/jpeg',
+    })
 
-  if (error) throw error
+  if (error) {
+    // Provide clearer error messages
+    if (error.message?.includes('Bucket not found')) {
+      throw new Error('Storage bucket chưa được tạo. Liên hệ quản trị viên.')
+    }
+    if (error.message?.includes('not authorized') || error.message?.includes('policy')) {
+      throw new Error('Không có quyền upload. Kiểm tra cấu hình Supabase Storage.')
+    }
+    throw new Error(error.message || 'Upload thất bại')
+  }
 
   const { data: urlData } = supabase.storage
     .from('hse-images')
     .getPublicUrl(path)
 
   return urlData.publicUrl
+}
+
+// Convert Google Drive share link to direct image URL
+export function driveShareToDirectUrl(shareUrl) {
+  if (!shareUrl) return shareUrl
+  // Handle: https://drive.google.com/file/d/FILE_ID/view?...
+  const fileMatch = shareUrl.match(/\/file\/d\/([a-zA-Z0-9_-]+)/)
+  if (fileMatch) {
+    return `https://drive.google.com/uc?export=view&id=${fileMatch[1]}`
+  }
+  // Handle: https://drive.google.com/open?id=FILE_ID
+  const openMatch = shareUrl.match(/[?&]id=([a-zA-Z0-9_-]+)/)
+  if (openMatch) {
+    return `https://drive.google.com/uc?export=view&id=${openMatch[1]}`
+  }
+  return shareUrl
 }
 
 // =============================================

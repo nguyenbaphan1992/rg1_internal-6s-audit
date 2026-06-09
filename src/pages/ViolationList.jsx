@@ -32,9 +32,12 @@ function ViolationModal({ violation, onClose, onUpdated }) {
   const [note, setNote] = useState('')
   const [updatedBy, setUpdatedBy] = useState('')
   const [uploading, setUploading] = useState(false)
+  const [uploadError, setUploadError] = useState('')
   const [saving, setSaving] = useState(false)
   const [evidenceUrl, setEvidenceUrl] = useState(violation.evidence_url || '')
   const [newEvidenceUrl, setNewEvidenceUrl] = useState('')
+  const [manualUrl, setManualUrl] = useState('')
+  const [showManualUrl, setShowManualUrl] = useState(false)
   const [history, setHistory] = useState(violation.cap_updates || [])
   const fileRef = useRef()
 
@@ -45,15 +48,23 @@ function ViolationModal({ violation, onClose, onUpdated }) {
     const file = e.target.files?.[0]
     if (!file) return
     setUploading(true)
+    setUploadError('')
     try {
       const url = await uploadEvidenceImage(file, violation.id)
       setNewEvidenceUrl(url)
       setEvidenceUrl(url)
     } catch (err) {
-      alert('Lỗi upload ảnh: ' + err.message)
+      setUploadError('Lỗi upload: ' + err.message + ' — Thử dùng "Nhập URL" bên dưới')
     } finally {
       setUploading(false)
     }
+  }
+
+  function handleManualUrl() {
+    if (!manualUrl.trim()) return
+    setNewEvidenceUrl(manualUrl.trim())
+    setEvidenceUrl(manualUrl.trim())
+    setShowManualUrl(false)
   }
 
   async function handleSave() {
@@ -102,29 +113,61 @@ function ViolationModal({ violation, onClose, onUpdated }) {
             ))}
           </div>
 
-          {/* Violation image (from Sheet) */}
-          {violation.image_path && (
-            <div>
-              <div className="text-xs text-slate-500 font-semibold mb-1">📸 Ảnh gốc vi phạm</div>
-              <div className="bg-slate-100 rounded-lg p-3 text-xs text-slate-500 break-all">
-                {violation.image_path}
-                <div className="mt-1 text-slate-400 italic">
-                  (Ảnh lưu trên Google Drive — tải ảnh khắc phục bên dưới)
+          {/* ─── ẢNH VI PHẠM GỐC (từ Google Sheet) ─── */}
+          <div className="border border-slate-200 rounded-xl overflow-hidden">
+            <div className="bg-slate-50 px-3 py-2 border-b border-slate-100 flex items-center justify-between">
+              <span className="text-xs font-semibold text-slate-600">📸 Ảnh vi phạm gốc (Google Drive)</span>
+              {violation.image_path && (
+                <button
+                  onClick={() => {
+                    navigator.clipboard?.writeText(violation.image_path)
+                    alert('Đã copy tên file: ' + violation.image_path.split('/').pop())
+                  }}
+                  className="text-xs text-blue-600 hover:underline"
+                >Copy tên file</button>
+              )}
+            </div>
+            {violation.image_path ? (
+              <div className="p-3 space-y-2">
+                {/* Thử hiển thị ảnh nếu image_path là URL đầy đủ */}
+                {violation.image_path.startsWith('http') ? (
+                  <img
+                    src={violation.image_path}
+                    alt="Ảnh vi phạm"
+                    className="w-full max-h-56 object-contain rounded-lg border border-slate-100 bg-slate-50"
+                    onError={(e) => { e.target.style.display='none'; e.target.nextSibling.style.display='block' }}
+                  />
+                ) : null}
+                <div className={`text-xs text-slate-500 bg-amber-50 border border-amber-100 rounded-lg p-2.5 ${violation.image_path.startsWith('http') ? 'hidden' : ''}`}>
+                  <div className="font-medium text-amber-700 mb-1">ℹ️ Ảnh lưu trên Google Drive</div>
+                  <div className="break-all font-mono text-amber-600">{violation.image_path.split('/').pop()}</div>
+                  <div className="mt-1.5 text-slate-400">
+                    Mở Google Drive → thư mục "Internal safety audit_Images" → tìm file trên
+                  </div>
                 </div>
               </div>
-            </div>
-          )}
+            ) : (
+              <div className="p-3 text-xs text-slate-400 italic">Không có ảnh gốc</div>
+            )}
+          </div>
 
-          {/* Evidence image uploaded */}
+          {/* ─── ẢNH BẰNG CHỨNG KHẮC PHỤC ─── */}
           {evidenceUrl && (
-            <div>
-              <div className="text-xs text-slate-500 font-semibold mb-1">🖼️ Ảnh bằng chứng khắc phục</div>
-              <img
-                src={evidenceUrl}
-                alt="Bằng chứng"
-                className="w-full max-h-48 object-contain rounded-lg border border-slate-200"
-                onError={(e) => { e.target.style.display='none' }}
-              />
+            <div className="border border-green-200 rounded-xl overflow-hidden">
+              <div className="bg-green-50 px-3 py-2 border-b border-green-100">
+                <span className="text-xs font-semibold text-green-700">✅ Ảnh bằng chứng khắc phục</span>
+              </div>
+              <div className="p-3">
+                <img
+                  src={evidenceUrl}
+                  alt="Bằng chứng khắc phục"
+                  className="w-full max-h-56 object-contain rounded-lg border border-slate-200 bg-slate-50"
+                  onError={(e) => {
+                    e.target.style.display='none'
+                    e.target.parentElement.innerHTML += `<div class="text-xs text-red-500 p-2">⚠️ Không tải được ảnh. URL: ${evidenceUrl}</div>`
+                  }}
+                />
+              </div>
             </div>
           )}
 
@@ -167,23 +210,43 @@ function ViolationModal({ violation, onClose, onUpdated }) {
             </div>
 
             <div>
-              <label className="text-xs text-slate-600 font-medium">Upload ảnh bằng chứng khắc phục</label>
-              <div className="mt-1 flex items-center gap-2">
+              <label className="text-xs text-slate-600 font-medium">📎 Ảnh bằng chứng khắc phục</label>
+              <div className="mt-1 flex flex-wrap items-center gap-2">
                 <button
                   onClick={() => fileRef.current?.click()}
                   className="bg-white border border-slate-200 text-slate-600 text-xs px-3 py-2 rounded-lg hover:bg-slate-50 transition-colors"
                   disabled={uploading}
                 >
-                  {uploading ? '⏳ Đang tải...' : '📎 Chọn ảnh'}
+                  {uploading ? '⏳ Đang tải...' : '📂 Upload từ máy'}
                 </button>
-                {newEvidenceUrl && <span className="text-green-600 text-xs">✅ Đã upload</span>}
-                <input
-                  ref={fileRef}
-                  type="file"
-                  accept="image/*"
-                  className="hidden"
-                  onChange={handleFileUpload}
-                />
+                <button
+                  onClick={() => setShowManualUrl(v => !v)}
+                  className="bg-white border border-slate-200 text-blue-600 text-xs px-3 py-2 rounded-lg hover:bg-slate-50 transition-colors"
+                >
+                  🔗 Nhập URL ảnh
+                </button>
+                {newEvidenceUrl && <span className="text-green-600 text-xs font-semibold">✅ Đã có ảnh</span>}
+                <input ref={fileRef} type="file" accept="image/*" className="hidden" onChange={handleFileUpload} />
+              </div>
+              {uploadError && (
+                <div className="mt-1.5 text-xs text-red-600 bg-red-50 rounded p-2">{uploadError}</div>
+              )}
+              {showManualUrl && (
+                <div className="mt-2 flex gap-2">
+                  <input
+                    value={manualUrl}
+                    onChange={e => setManualUrl(e.target.value)}
+                    placeholder="Dán URL ảnh (Google Drive, imgur, ...)"
+                    className="flex-1 border border-slate-200 rounded-lg px-3 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-blue-300"
+                  />
+                  <button
+                    onClick={handleManualUrl}
+                    className="bg-blue-600 text-white text-xs px-3 py-1.5 rounded-lg hover:bg-blue-700"
+                  >Dùng URL</button>
+                </div>
+              )}
+              <div className="mt-1.5 text-xs text-slate-400">
+                💡 Dùng Google Drive: tải ảnh lên Drive → Share → Anyone with link → Copy link
               </div>
             </div>
           </div>
