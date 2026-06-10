@@ -157,15 +157,59 @@ export async function fetchDashboardStats({ month, year } = {}) {
 // RECENT IMAGES (for rolling panel)
 // =============================================
 
-export async function fetchRecentViolationsWithImages(limit = 10) {
+export async function fetchRecentViolationsWithImages(limit = 20) {
+  // Lấy cả evidence_url lẫn image_path (Drive)
   const { data, error } = await supabase
     .from('violations')
     .select('id, department, inspection_category, violation_detail, severity, inspection_date, evidence_url, image_path')
-    .not('evidence_url', 'is', null)
+    .or('evidence_url.not.is.null,image_path.not.is.null')
     .order('inspection_date', { ascending: false })
     .limit(limit)
   if (error) throw error
   return data || []
+}
+
+// =============================================
+// GOOGLE DRIVE IMAGE RESOLVER
+// =============================================
+
+// In-memory cache: filename → public URL (or null if not found)
+const _driveCache = {}
+
+export async function resolveGDriveImageUrl(imagePath) {
+  if (!imagePath) return null
+  // Nếu đã là URL đầy đủ thì dùng luôn
+  if (imagePath.startsWith('http')) return imagePath
+
+  const fileName = imagePath.split('/').pop()
+  if (!fileName) return null
+
+  // Cache hit
+  if (fileName in _driveCache) return _driveCache[fileName]
+
+  const folderId = import.meta.env.VITE_GDRIVE_FOLDER_ID
+  const apiKey   = import.meta.env.VITE_GDRIVE_API_KEY
+  if (!folderId || !apiKey) return null
+
+  try {
+    // Tìm file theo tên trong Drive (tìm trong folder và các subfolder của nó)
+    const q = encodeURIComponent(`name='${fileName}' and trashed=false`)
+    const res = await fetch(
+      `https://www.googleapis.com/drive/v3/files?q=${q}&fields=files(id,name)&key=${apiKey}&pageSize=1&corpora=allDrives&includeItemsFromAllDrives=true&supportsAllDrives=true`
+    )
+    const data = await res.json()
+
+    if (data.files?.length > 0) {
+      const url = `https://drive.google.com/uc?export=view&id=${data.files[0].id}`
+      _driveCache[fileName] = url
+      return url
+    }
+  } catch (e) {
+    console.warn('GDrive resolve error:', e)
+  }
+
+  _driveCache[fileName] = null
+  return null
 }
 
 // =============================================

@@ -3,7 +3,7 @@ import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
   PieChart, Pie, Cell, Legend
 } from 'recharts'
-import { fetchDashboardStats, fetchRecentViolationsWithImages } from '../lib/api'
+import { fetchDashboardStats, fetchRecentViolationsWithImages, resolveGDriveImageUrl } from '../lib/api'
 import { SEVERITY_LEVELS, CAP_STATUSES, CATEGORY_COLORS, getSeverityConfig, getCapStatusConfig } from '../lib/constants'
 
 // ─── DEPT COMPARE CHART ───────────────────────────────────────────────────────
@@ -108,7 +108,7 @@ function RollingImagePanel({ images }) {
       <div className="flex-1 relative bg-slate-50 overflow-hidden" style={{ minHeight: '180px' }}>
         <img
           key={img.id}
-          src={img.evidence_url}
+          src={img.display_url}
           alt="Ảnh vi phạm"
           className="w-full h-full object-cover slide-in"
           onError={(e) => { e.target.style.display = 'none' }}
@@ -339,12 +339,22 @@ export default function Dashboard({ onNavigate }) {
     setLoading(true)
     setError(null)
     try {
-      const [s, imgs] = await Promise.all([
+      const [s, rawImgs] = await Promise.all([
         fetchDashboardStats(filter),
-        fetchRecentViolationsWithImages(8)
+        fetchRecentViolationsWithImages(20)
       ])
       setStats(s)
-      setImages(imgs)
+
+      // Resolve Drive image paths thành URL thực để rolling panel hiển thị được
+      const resolved = await Promise.all(
+        rawImgs.map(async img => {
+          // Ưu tiên evidence_url (đã là URL), fallback sang image_path (Drive)
+          if (img.evidence_url) return { ...img, display_url: img.evidence_url }
+          const driveUrl = await resolveGDriveImageUrl(img.image_path)
+          return driveUrl ? { ...img, display_url: driveUrl } : null
+        })
+      )
+      setImages(resolved.filter(Boolean).slice(0, 10))
     } catch (e) {
       setError(e.message)
     } finally {

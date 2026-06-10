@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react'
-import { fetchViolations, updateCapStatus, updateViolation, deleteViolation, uploadEvidenceImage } from '../lib/api'
+import { fetchViolations, updateCapStatus, updateViolation, deleteViolation, uploadEvidenceImage, resolveGDriveImageUrl } from '../lib/api'
 import {
   RG1_DEPARTMENTS, INSPECTION_CATEGORIES, SEVERITY_LEVELS, CAP_STATUSES,
   getSeverityConfig, getCapStatusConfig
@@ -241,7 +241,22 @@ function ViolationModal({ violation, onClose, onUpdated }) {
   const [manualUrl, setManualUrl] = useState('')
   const [showManualUrl, setShowManualUrl] = useState(false)
   const [history, setHistory] = useState(violation.cap_updates || [])
+  const [resolvedImageUrl, setResolvedImageUrl] = useState(null)
+  const [resolvingImage, setResolvingImage] = useState(false)
   const fileRef = useRef()
+
+  // Resolve Google Drive image path → public URL
+  useEffect(() => {
+    if (!violation.image_path || violation.image_path.startsWith('http')) {
+      setResolvedImageUrl(violation.image_path || null)
+      return
+    }
+    setResolvingImage(true)
+    resolveGDriveImageUrl(violation.image_path).then(url => {
+      setResolvedImageUrl(url)
+      setResolvingImage(false)
+    })
+  }, [violation.image_path])
 
   const fmt = (d) => d ? new Date(d).toLocaleDateString('vi-VN', { day:'2-digit', month:'2-digit', year:'numeric' }) : '—'
 
@@ -314,36 +329,36 @@ function ViolationModal({ violation, onClose, onUpdated }) {
             ))}
           </div>
 
-          {/* ─── ẢNH VI PHẠM GỐC (từ Google Sheet) ─── */}
+          {/* ─── ẢNH VI PHẠM GỐC (từ Google Sheet / Drive) ─── */}
           <div className="border border-slate-200 rounded-xl overflow-hidden">
             <div className="bg-slate-50 px-3 py-2 border-b border-slate-100 flex items-center justify-between">
-              <span className="text-xs font-semibold text-slate-600">📸 Ảnh vi phạm gốc (Google Drive)</span>
-              {violation.image_path && (
-                <button
-                  onClick={() => {
-                    navigator.clipboard?.writeText(violation.image_path)
-                    alert('Đã copy tên file: ' + violation.image_path.split('/').pop())
-                  }}
-                  className="text-xs text-blue-600 hover:underline"
-                >Copy tên file</button>
+              <span className="text-xs font-semibold text-slate-600">📸 Ảnh vi phạm gốc</span>
+              {resolvingImage && (
+                <span className="text-xs text-slate-400 animate-pulse">⏳ Đang tải ảnh...</span>
               )}
             </div>
             {violation.image_path ? (
-              <div className="p-3 space-y-2">
-                {violation.image_path.startsWith('http') ? (
+              <div className="p-3">
+                {resolvingImage ? (
+                  <div className="flex items-center justify-center h-32 bg-slate-50 rounded-lg">
+                    <span className="text-slate-400 text-sm animate-pulse">Đang resolve ảnh Drive...</span>
+                  </div>
+                ) : resolvedImageUrl ? (
                   <img
-                    src={violation.image_path}
+                    src={resolvedImageUrl}
                     alt="Ảnh vi phạm"
-                    className="w-full max-h-56 object-contain rounded-lg border border-slate-100 bg-slate-50"
-                    onError={(e) => { e.target.style.display='none'; e.target.nextSibling.style.display='block' }}
+                    className="w-full max-h-64 object-contain rounded-lg border border-slate-100 bg-slate-50"
+                    onError={(e) => {
+                      e.target.style.display = 'none'
+                      e.target.nextSibling.style.display = 'block'
+                    }}
                   />
                 ) : null}
-                <div className={`text-xs text-slate-500 bg-amber-50 border border-amber-100 rounded-lg p-2.5 ${violation.image_path.startsWith('http') ? 'hidden' : ''}`}>
-                  <div className="font-medium text-amber-700 mb-1">ℹ️ Ảnh lưu trên Google Drive</div>
+                {/* Fallback nếu không resolve được */}
+                <div className={`text-xs text-amber-700 bg-amber-50 border border-amber-100 rounded-lg p-2.5 mt-2 ${resolvingImage || resolvedImageUrl ? 'hidden' : ''}`}>
+                  <div className="font-medium mb-1">⚠️ Không tìm thấy ảnh trên Drive</div>
                   <div className="break-all font-mono text-amber-600">{violation.image_path.split('/').pop()}</div>
-                  <div className="mt-1.5 text-slate-400">
-                    Mở Google Drive → thư mục "Internal safety audit_Images" → tìm file trên
-                  </div>
+                  <div className="mt-1 text-slate-400">Kiểm tra thư mục đã được share "Anyone with the link" chưa.</div>
                 </div>
               </div>
             ) : (
