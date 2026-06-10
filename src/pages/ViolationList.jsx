@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react'
-import { fetchViolations, updateCapStatus, uploadEvidenceImage } from '../lib/api'
+import { fetchViolations, updateCapStatus, updateViolation, deleteViolation, uploadEvidenceImage } from '../lib/api'
 import {
   RG1_DEPARTMENTS, INSPECTION_CATEGORIES, SEVERITY_LEVELS, CAP_STATUSES,
   getSeverityConfig, getCapStatusConfig
@@ -26,6 +26,208 @@ function CapBadge({ status }) {
   )
 }
 
+// ─── EDIT MODAL ───────────────────────────────────────────────────────────────
+function EditViolationModal({ violation, onClose, onUpdated }) {
+  const [form, setForm] = useState({
+    inspection_date: violation.inspection_date ? violation.inspection_date.slice(0, 10) : '',
+    inspector: violation.inspector || '',
+    department: violation.department || '',
+    inspection_category: violation.inspection_category || '',
+    violation_detail: violation.violation_detail || '',
+    severity: violation.severity || 'Medium',
+    responsible_dept: violation.responsible_dept || '',
+    due_date: violation.due_date ? violation.due_date.slice(0, 10) : '',
+    recorder: violation.recorder || '',
+  })
+  const [saving, setSaving] = useState(false)
+
+  const set = (k, v) => setForm(f => ({ ...f, [k]: v }))
+  const severityCfg = getSeverityConfig(form.severity)
+
+  async function handleSave() {
+    if (!form.violation_detail.trim()) {
+      alert('Vui lòng nhập chi tiết vi phạm')
+      return
+    }
+    setSaving(true)
+    try {
+      await updateViolation(violation.id, {
+        ...form,
+        inspection_date: form.inspection_date || null,
+        due_date: form.due_date || null,
+      })
+      onUpdated()
+      onClose()
+    } catch (err) {
+      alert('Lỗi cập nhật: ' + err.message)
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  const inputCls = "w-full border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-300 bg-white"
+  const labelCls = "block text-xs font-semibold text-slate-500 mb-1"
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-start justify-center bg-black/50 p-4 pt-12 overflow-y-auto">
+      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-xl">
+        {/* Header */}
+        <div className="flex items-center justify-between p-5 border-b border-slate-100">
+          <div>
+            <h2 className="text-base font-bold text-slate-800">✏️ Chỉnh sửa vi phạm</h2>
+            <p className="text-xs text-slate-400 font-mono mt-0.5">{violation.audit_id}</p>
+          </div>
+          <button onClick={onClose} className="text-slate-400 hover:text-slate-600 text-2xl leading-none ml-3">×</button>
+        </div>
+
+        <div className="p-5 space-y-4 max-h-[70vh] overflow-y-auto">
+          {/* Row 1: Ngày + Inspector */}
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className={labelCls}>📅 Ngày kiểm tra</label>
+              <input type="date" value={form.inspection_date}
+                onChange={e => set('inspection_date', e.target.value)}
+                className={inputCls} />
+            </div>
+            <div>
+              <label className={labelCls}>👤 Người kiểm tra</label>
+              <input type="text" value={form.inspector}
+                onChange={e => set('inspector', e.target.value)}
+                placeholder="Tên người kiểm tra"
+                className={inputCls} />
+            </div>
+          </div>
+
+          {/* Row 2: Bộ phận + Hạng mục */}
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className={labelCls}>🏭 Bộ phận / khu vực</label>
+              <select value={form.department} onChange={e => set('department', e.target.value)} className={inputCls}>
+                <option value="">-- Chọn bộ phận --</option>
+                {RG1_DEPARTMENTS.map(d => <option key={d} value={d}>{d}</option>)}
+              </select>
+            </div>
+            <div>
+              <label className={labelCls}>🗂️ Hạng mục kiểm tra</label>
+              <select value={form.inspection_category} onChange={e => set('inspection_category', e.target.value)} className={inputCls}>
+                <option value="">-- Chọn hạng mục --</option>
+                {INSPECTION_CATEGORIES.map(c => <option key={c} value={c}>{c}</option>)}
+              </select>
+            </div>
+          </div>
+
+          {/* Chi tiết vi phạm */}
+          <div>
+            <label className={labelCls}>⚠️ Chi tiết vi phạm <span className="text-red-500">*</span></label>
+            <textarea value={form.violation_detail}
+              onChange={e => set('violation_detail', e.target.value)}
+              rows={3}
+              placeholder="Mô tả chi tiết điểm vi phạm / chưa tuân thủ..."
+              className={`${inputCls} resize-none`} />
+          </div>
+
+          {/* Severity + preview */}
+          <div>
+            <label className={labelCls}>🚦 Mức độ nghiêm trọng</label>
+            <div className="flex items-center gap-3">
+              <select value={form.severity} onChange={e => set('severity', e.target.value)} className={`${inputCls} flex-1`}>
+                {SEVERITY_LEVELS.map(s => <option key={s.value} value={s.value}>{s.label}</option>)}
+              </select>
+              <span className="px-3 py-1.5 rounded-full text-xs font-bold border whitespace-nowrap"
+                style={{ background: severityCfg.bg, color: severityCfg.color, border: `1px solid ${severityCfg.border}` }}>
+                {form.severity}
+              </span>
+            </div>
+          </div>
+
+          {/* Row: Phòng chịu TN + Thời hạn */}
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className={labelCls}>🏢 Phòng chịu trách nhiệm</label>
+              <input type="text" value={form.responsible_dept}
+                onChange={e => set('responsible_dept', e.target.value)}
+                placeholder="VD: 1U01, Kỹ thuật..."
+                className={inputCls} />
+            </div>
+            <div>
+              <label className={labelCls}>⏰ Thời hạn xử lý</label>
+              <input type="date" value={form.due_date}
+                onChange={e => set('due_date', e.target.value)}
+                className={inputCls} />
+            </div>
+          </div>
+
+          {/* Recorder */}
+          <div>
+            <label className={labelCls}>📝 Người ghi nhận / duyệt</label>
+            <input type="text" value={form.recorder}
+              onChange={e => set('recorder', e.target.value)}
+              placeholder="Tên người ghi nhận"
+              className={inputCls} />
+          </div>
+        </div>
+
+        {/* Footer */}
+        <div className="p-5 border-t border-slate-100 flex justify-end gap-2">
+          <button onClick={onClose}
+            className="px-4 py-2 text-sm border border-slate-200 rounded-lg text-slate-600 hover:bg-slate-50 transition-colors">
+            Hủy
+          </button>
+          <button onClick={handleSave} disabled={saving}
+            className="px-4 py-2 text-sm bg-blue-700 text-white rounded-lg hover:bg-blue-800 transition-colors disabled:opacity-50">
+            {saving ? '⏳ Đang lưu...' : '💾 Lưu thay đổi'}
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+// ─── DELETE CONFIRM MODAL ─────────────────────────────────────────────────────
+function DeleteConfirmModal({ violation, onClose, onDeleted }) {
+  const [deleting, setDeleting] = useState(false)
+
+  async function handleDelete() {
+    setDeleting(true)
+    try {
+      await deleteViolation(violation.id)
+      onDeleted()
+      onClose()
+    } catch (err) {
+      alert('Lỗi xóa: ' + err.message)
+      setDeleting(false)
+    }
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-sm">
+        <div className="p-6 text-center">
+          <div className="text-5xl mb-4">🗑️</div>
+          <h2 className="text-lg font-bold text-slate-800 mb-2">Xóa vi phạm?</h2>
+          <p className="text-sm text-slate-500 mb-1">
+            <span className="font-mono text-slate-400">{violation.audit_id}</span>
+          </p>
+          <p className="text-sm text-slate-600 line-clamp-2 mb-1">{violation.violation_detail}</p>
+          <p className="text-xs text-red-500 mt-3 bg-red-50 rounded-lg p-2">
+            ⚠️ Hành động này không thể hoàn tác. Toàn bộ lịch sử CAP cũng sẽ bị xóa.
+          </p>
+        </div>
+        <div className="px-6 pb-6 flex gap-2">
+          <button onClick={onClose}
+            className="flex-1 px-4 py-2 text-sm border border-slate-200 rounded-lg text-slate-600 hover:bg-slate-50 transition-colors">
+            Hủy
+          </button>
+          <button onClick={handleDelete} disabled={deleting}
+            className="flex-1 px-4 py-2 text-sm bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors disabled:opacity-50">
+            {deleting ? '⏳ Đang xóa...' : '🗑️ Xác nhận xóa'}
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 // ─── DETAIL MODAL ─────────────────────────────────────────────────────────────
 function ViolationModal({ violation, onClose, onUpdated }) {
   const [status, setStatus] = useState(violation.cap_status || 'Chưa xử lý')
@@ -42,7 +244,6 @@ function ViolationModal({ violation, onClose, onUpdated }) {
   const fileRef = useRef()
 
   const fmt = (d) => d ? new Date(d).toLocaleDateString('vi-VN', { day:'2-digit', month:'2-digit', year:'numeric' }) : '—'
-  const severityCfg = getSeverityConfig(violation.severity)
 
   async function handleFileUpload(e) {
     const file = e.target.files?.[0]
@@ -129,7 +330,6 @@ function ViolationModal({ violation, onClose, onUpdated }) {
             </div>
             {violation.image_path ? (
               <div className="p-3 space-y-2">
-                {/* Thử hiển thị ảnh nếu image_path là URL đầy đủ */}
                 {violation.image_path.startsWith('http') ? (
                   <img
                     src={violation.image_path}
@@ -164,7 +364,7 @@ function ViolationModal({ violation, onClose, onUpdated }) {
                   className="w-full max-h-56 object-contain rounded-lg border border-slate-200 bg-slate-50"
                   onError={(e) => {
                     e.target.style.display='none'
-                    e.target.parentElement.innerHTML += `<div class="text-xs text-red-500 p-2">⚠️ Không tải được ảnh. URL: ${evidenceUrl}</div>`
+                    e.target.parentElement.innerHTML += `<div class="text-xs text-red-500 p-2">⚠️ Không tải được ảnh.</div>`
                   }}
                 />
               </div>
@@ -246,7 +446,7 @@ function ViolationModal({ violation, onClose, onUpdated }) {
                 </div>
               )}
               <div className="mt-1.5 text-xs text-slate-400">
-                💡 Dùng Google Drive: tải ảnh lên Drive → Share → Anyone with link → Copy link
+                💡 Google Drive: tải ảnh → Share → Anyone with link → Copy link
               </div>
             </div>
           </div>
@@ -307,7 +507,6 @@ function FilterBar({ filters, onChange }) {
   return (
     <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-4">
       <div className="flex flex-wrap gap-2">
-        {/* Search */}
         <input
           type="text"
           placeholder="🔍 Tìm vi phạm..."
@@ -315,52 +514,27 @@ function FilterBar({ filters, onChange }) {
           onChange={e => onChange({ ...filters, search: e.target.value })}
           className="border border-slate-200 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-300 flex-1 min-w-40"
         />
-
-        {/* Department */}
-        <select
-          value={filters.department}
-          onChange={e => onChange({ ...filters, department: e.target.value })}
-          className="border border-slate-200 rounded-lg px-3 py-1.5 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-blue-300"
-        >
+        <select value={filters.department} onChange={e => onChange({ ...filters, department: e.target.value })}
+          className="border border-slate-200 rounded-lg px-3 py-1.5 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-blue-300">
           <option value="all">Tất cả bộ phận</option>
           {RG1_DEPARTMENTS.map(d => <option key={d} value={d}>{d}</option>)}
         </select>
-
-        {/* Severity */}
-        <select
-          value={filters.severity}
-          onChange={e => onChange({ ...filters, severity: e.target.value })}
-          className="border border-slate-200 rounded-lg px-3 py-1.5 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-blue-300"
-        >
+        <select value={filters.severity} onChange={e => onChange({ ...filters, severity: e.target.value })}
+          className="border border-slate-200 rounded-lg px-3 py-1.5 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-blue-300">
           <option value="all">Tất cả mức độ</option>
           {SEVERITY_LEVELS.map(s => <option key={s.value} value={s.value}>{s.label}</option>)}
         </select>
-
-        {/* CAP Status */}
-        <select
-          value={filters.capStatus}
-          onChange={e => onChange({ ...filters, capStatus: e.target.value })}
-          className="border border-slate-200 rounded-lg px-3 py-1.5 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-blue-300"
-        >
+        <select value={filters.capStatus} onChange={e => onChange({ ...filters, capStatus: e.target.value })}
+          className="border border-slate-200 rounded-lg px-3 py-1.5 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-blue-300">
           <option value="all">Tất cả trạng thái</option>
           {CAP_STATUSES.map(s => <option key={s.value} value={s.value}>{s.icon} {s.label}</option>)}
         </select>
-
-        {/* Month */}
-        <select
-          value={filters.month}
-          onChange={e => onChange({ ...filters, month: e.target.value })}
-          className="border border-slate-200 rounded-lg px-3 py-1.5 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-blue-300"
-        >
+        <select value={filters.month} onChange={e => onChange({ ...filters, month: e.target.value })}
+          className="border border-slate-200 rounded-lg px-3 py-1.5 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-blue-300">
           {months.map(m => <option key={m.v} value={m.v}>{m.l}</option>)}
         </select>
-
-        {/* Year */}
-        <select
-          value={filters.year}
-          onChange={e => onChange({ ...filters, year: e.target.value })}
-          className="border border-slate-200 rounded-lg px-3 py-1.5 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-blue-300"
-        >
+        <select value={filters.year} onChange={e => onChange({ ...filters, year: e.target.value })}
+          className="border border-slate-200 rounded-lg px-3 py-1.5 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-blue-300">
           {years.map(y => <option key={y} value={y}>{y}</option>)}
         </select>
       </div>
@@ -373,7 +547,9 @@ export default function ViolationList() {
   const [violations, setViolations] = useState([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
-  const [selected, setSelected] = useState(null)
+  const [selected, setSelected] = useState(null)      // view modal
+  const [editing, setEditing] = useState(null)        // edit modal
+  const [deleting, setDeleting] = useState(null)      // delete modal
   const now = new Date()
 
   const [filters, setFilters] = useState({
@@ -410,7 +586,6 @@ export default function ViolationList() {
 
   const fmt = (d) => d ? new Date(d).toLocaleDateString('vi-VN') : '—'
 
-  // Client-side search filter
   const filtered = violations.filter(v => {
     if (!filters.search) return true
     const q = filters.search.toLowerCase()
@@ -422,9 +597,8 @@ export default function ViolationList() {
     )
   })
 
-  // Summary counts
-  const open   = filtered.filter(v => v.cap_status === 'Chưa xử lý').length
-  const closed = filtered.filter(v => v.cap_status === 'Đã đóng').length
+  const open     = filtered.filter(v => v.cap_status === 'Chưa xử lý').length
+  const closed   = filtered.filter(v => v.cap_status === 'Đã đóng').length
   const critical = filtered.filter(v => v.severity === 'Critical').length
 
   return (
@@ -437,10 +611,8 @@ export default function ViolationList() {
             {filtered.length} vi phạm · {open} chưa xử lý · {critical} critical · {closed} đã đóng
           </p>
         </div>
-        <button
-          onClick={load}
-          className="text-sm bg-blue-700 text-white px-3 py-1.5 rounded-lg hover:bg-blue-800 transition-colors"
-        >
+        <button onClick={load}
+          className="text-sm bg-blue-700 text-white px-3 py-1.5 rounded-lg hover:bg-blue-800 transition-colors">
           🔄 Làm mới
         </button>
       </div>
@@ -448,9 +620,7 @@ export default function ViolationList() {
       <FilterBar filters={filters} onChange={setFilters} />
 
       {error && (
-        <div className="bg-red-50 border border-red-200 text-red-700 text-sm rounded-lg p-3">
-          ⚠️ {error}
-        </div>
+        <div className="bg-red-50 border border-red-200 text-red-700 text-sm rounded-lg p-3">⚠️ {error}</div>
       )}
 
       {loading ? (
@@ -483,9 +653,7 @@ export default function ViolationList() {
                     const isOverdue = v.due_date && v.cap_status !== 'Đã đóng' && new Date(v.due_date) < new Date()
                     return (
                       <tr key={v.id}
-                        className={`hover:bg-slate-50 cursor-pointer ${isOverdue ? 'bg-red-50/30' : ''}`}
-                        onClick={() => setSelected(v)}
-                      >
+                        className={`hover:bg-slate-50 ${isOverdue ? 'bg-red-50/30' : ''}`}>
                         <td className="px-4 py-3 font-semibold text-slate-700">{v.department || '—'}</td>
                         <td className="px-4 py-3 text-slate-500">
                           {(v.inspection_category || '—').replace('An toàn ', '')}
@@ -505,12 +673,23 @@ export default function ViolationList() {
                           <CapBadge status={v.cap_status} />
                         </td>
                         <td className="text-center px-3 py-3">
-                          <button
-                            onClick={e => { e.stopPropagation(); setSelected(v) }}
-                            className="text-blue-600 hover:text-blue-800 font-medium"
-                          >
-                            Xem →
-                          </button>
+                          <div className="flex items-center justify-center gap-1">
+                            <button
+                              onClick={() => setSelected(v)}
+                              title="Xem chi tiết"
+                              className="px-2 py-1 text-blue-600 hover:bg-blue-50 rounded-lg transition-colors font-medium"
+                            >👁</button>
+                            <button
+                              onClick={() => setEditing(v)}
+                              title="Chỉnh sửa"
+                              className="px-2 py-1 text-amber-600 hover:bg-amber-50 rounded-lg transition-colors font-medium"
+                            >✏️</button>
+                            <button
+                              onClick={() => setDeleting(v)}
+                              title="Xóa"
+                              className="px-2 py-1 text-red-500 hover:bg-red-50 rounded-lg transition-colors font-medium"
+                            >🗑️</button>
+                          </div>
                         </td>
                       </tr>
                     )
@@ -533,13 +712,8 @@ export default function ViolationList() {
             {filtered.map(v => {
               const isOverdue = v.due_date && v.cap_status !== 'Đã đóng' && new Date(v.due_date) < new Date()
               return (
-                <div
-                  key={v.id}
-                  onClick={() => setSelected(v)}
-                  className={`bg-white rounded-xl shadow-sm border p-4 cursor-pointer active:bg-slate-50 ${
-                    isOverdue ? 'border-red-200' : 'border-slate-200'
-                  }`}
-                >
+                <div key={v.id}
+                  className={`bg-white rounded-xl shadow-sm border p-4 ${isOverdue ? 'border-red-200' : 'border-slate-200'}`}>
                   <div className="flex items-start justify-between gap-2 mb-2">
                     <div className="flex items-center gap-2 flex-wrap">
                       <SeverityBadge severity={v.severity} />
@@ -548,11 +722,26 @@ export default function ViolationList() {
                     <CapBadge status={v.cap_status} />
                   </div>
                   <div className="text-sm font-medium text-slate-700 mb-1 line-clamp-2">{v.violation_detail}</div>
-                  <div className="flex items-center justify-between text-xs text-slate-400">
+                  <div className="flex items-center justify-between text-xs text-slate-400 mb-3">
                     <span>{v.inspection_category?.replace('An toàn ', '') || '—'}</span>
                     <span className={isOverdue ? 'text-red-500 font-semibold' : ''}>
                       {isOverdue ? '⚠️ ' : ''}Hạn: {fmt(v.due_date)}
                     </span>
+                  </div>
+                  {/* Mobile action buttons */}
+                  <div className="flex gap-2 pt-2 border-t border-slate-100">
+                    <button
+                      onClick={() => setSelected(v)}
+                      className="flex-1 py-1.5 text-xs text-blue-600 border border-blue-200 rounded-lg hover:bg-blue-50 transition-colors font-medium"
+                    >👁 Xem</button>
+                    <button
+                      onClick={() => setEditing(v)}
+                      className="flex-1 py-1.5 text-xs text-amber-600 border border-amber-200 rounded-lg hover:bg-amber-50 transition-colors font-medium"
+                    >✏️ Sửa</button>
+                    <button
+                      onClick={() => setDeleting(v)}
+                      className="flex-1 py-1.5 text-xs text-red-500 border border-red-200 rounded-lg hover:bg-red-50 transition-colors font-medium"
+                    >🗑️ Xóa</button>
                   </div>
                 </div>
               )
@@ -567,12 +756,30 @@ export default function ViolationList() {
         </>
       )}
 
-      {/* VIOLATION DETAIL MODAL */}
+      {/* VIEW MODAL */}
       {selected && (
         <ViolationModal
           violation={selected}
           onClose={() => setSelected(null)}
           onUpdated={() => { setSelected(null); load() }}
+        />
+      )}
+
+      {/* EDIT MODAL */}
+      {editing && (
+        <EditViolationModal
+          violation={editing}
+          onClose={() => setEditing(null)}
+          onUpdated={() => { setEditing(null); load() }}
+        />
+      )}
+
+      {/* DELETE CONFIRM MODAL */}
+      {deleting && (
+        <DeleteConfirmModal
+          violation={deleting}
+          onClose={() => setDeleting(null)}
+          onDeleted={() => { setDeleting(null); load() }}
         />
       )}
     </div>

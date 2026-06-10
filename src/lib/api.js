@@ -62,6 +62,13 @@ export async function updateViolation(id, updates) {
   return data
 }
 
+export async function deleteViolation(id) {
+  // Delete CAP history first (foreign key)
+  await supabase.from('cap_updates').delete().eq('violation_id', id)
+  const { error } = await supabase.from('violations').delete().eq('id', id)
+  if (error) throw error
+}
+
 export async function updateCapStatus(id, newStatus, note, updatedBy, evidenceUrl) {
   // Get current status for history
   const { data: current } = await supabase
