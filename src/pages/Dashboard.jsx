@@ -84,12 +84,14 @@ function RollingImagePanel({ images }) {
 
   if (!images.length) {
     return (
-      <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-4 flex flex-col h-full min-h-48">
-        <div className="flex items-center gap-2 mb-3">
-          <span className="text-red-600 font-bold text-sm">📸 Ảnh vi phạm mới nhất</span>
+      <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-4 flex flex-col h-full min-h-64">
+        <div className="px-1 pb-2 border-b border-slate-100 mb-3">
+          <span className="text-blue-900 font-bold text-sm">📸 Vi phạm mới nhất</span>
         </div>
-        <div className="flex-1 flex items-center justify-center text-slate-400 text-sm">
-          Chưa có ảnh bằng chứng nào được tải lên
+        <div className="flex-1 flex flex-col items-center justify-center text-slate-400 text-sm gap-2">
+          <span className="text-3xl">🖼️</span>
+          <span>Chưa có ảnh vi phạm nào</span>
+          <span className="text-xs text-center">Import dữ liệu từ Google Sheet để hiển thị ảnh</span>
         </div>
       </div>
     )
@@ -105,7 +107,7 @@ function RollingImagePanel({ images }) {
         <span className="text-xs text-slate-400">{current + 1}/{images.length}</span>
       </div>
 
-      <div className="flex-1 relative bg-slate-50 overflow-hidden" style={{ minHeight: '180px' }}>
+      <div className="flex-1 relative bg-slate-900 overflow-hidden" style={{ minHeight: '220px' }}>
         <img
           key={img.id}
           src={img.display_url}
@@ -114,7 +116,7 @@ function RollingImagePanel({ images }) {
           onError={(e) => { e.target.style.display = 'none' }}
         />
         {/* Overlay info */}
-        <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/70 to-transparent p-3">
+        <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/80 to-transparent p-3">
           <span
             className="text-xs font-bold px-2 py-0.5 rounded-full"
             style={{ background: severityCfg.bg, color: severityCfg.color }}
@@ -445,15 +447,18 @@ export default function Dashboard({ onNavigate }) {
           <CapStatusBar byCapStatus={stats.byCapStatus} total={stats.total} />
 
           {/* MAIN CHARTS + ROLLING IMAGE */}
-          <div className="grid grid-cols-1 xl:grid-cols-3 gap-5">
-            {/* Left: Category Bar Chart */}
-            <div className="xl:col-span-2 bg-white rounded-xl shadow-sm border border-slate-200 p-4">
-              <h3 className="font-bold text-blue-900 text-sm mb-3">Vi phạm theo hạng mục kiểm tra</h3>
-              <CategoryBarChart byCategory={stats.byCategory} />
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+            {/* Left: Category Bar Chart — chiếm 2/3 */}
+            <div className="lg:col-span-2 bg-white rounded-xl shadow-sm border border-slate-200 p-4 flex flex-col">
+              <h3 className="font-bold text-blue-900 text-sm mb-1">Vi phạm theo hạng mục kiểm tra</h3>
+              <p className="text-xs text-slate-400 mb-2">Số lượng vi phạm ghi nhận theo từng hạng mục</p>
+              <div className="flex-1">
+                <CategoryBarChart byCategory={stats.byCategory} />
+              </div>
             </div>
 
-            {/* Right: Rolling Image */}
-            <div className="xl:col-span-1">
+            {/* Right: Rolling Image — chiếm 1/3 */}
+            <div className="lg:col-span-1 flex flex-col">
               <RollingImagePanel images={images} />
             </div>
           </div>
