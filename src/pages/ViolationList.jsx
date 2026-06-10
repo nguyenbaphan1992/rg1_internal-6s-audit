@@ -27,7 +27,7 @@ function CapBadge({ status }) {
   )
 }
 
-// ─── EDIT MODAL ───────────────────────────────────────────────────────────────
+// ─── EDIT MODAL (chỉnh sửa + cập nhật CAP) ───────────────────────────────────
 function EditViolationModal({ violation, onClose, onUpdated }) {
   const [form, setForm] = useState({
     inspection_date: violation.inspection_date ? violation.inspection_date.slice(0, 10) : '',
@@ -40,10 +40,42 @@ function EditViolationModal({ violation, onClose, onUpdated }) {
     due_date: violation.due_date ? violation.due_date.slice(0, 10) : '',
     recorder: violation.recorder || '',
   })
+
+  // CAP update state
+  const [capStatus, setCapStatus] = useState(violation.cap_status || 'Chưa xử lý')
+  const [capNote, setCapNote] = useState('')
+  const [capUpdatedBy, setCapUpdatedBy] = useState('')
+  const [uploading, setUploading] = useState(false)
+  const [uploadError, setUploadError] = useState('')
+  const [newEvidenceUrl, setNewEvidenceUrl] = useState('')
+  const [showManualUrl, setShowManualUrl] = useState(false)
+  const [manualUrl, setManualUrl] = useState('')
   const [saving, setSaving] = useState(false)
+  const fileRef = useRef()
 
   const set = (k, v) => setForm(f => ({ ...f, [k]: v }))
   const severityCfg = getSeverityConfig(form.severity)
+
+  async function handleFileUpload(e) {
+    const file = e.target.files?.[0]
+    if (!file) return
+    setUploading(true)
+    setUploadError('')
+    try {
+      const url = await uploadEvidenceImage(file, violation.id)
+      setNewEvidenceUrl(url)
+    } catch (err) {
+      setUploadError('Lỗi upload: ' + err.message + ' — Thử dùng "Nhập URL" bên dưới')
+    } finally {
+      setUploading(false)
+    }
+  }
+
+  function handleManualUrl() {
+    if (!manualUrl.trim()) return
+    setNewEvidenceUrl(manualUrl.trim())
+    setShowManualUrl(false)
+  }
 
   async function handleSave() {
     if (!form.violation_detail.trim()) {
@@ -52,11 +84,17 @@ function EditViolationModal({ violation, onClose, onUpdated }) {
     }
     setSaving(true)
     try {
+      // 1. Cập nhật thông tin cơ bản
       await updateViolation(violation.id, {
         ...form,
         inspection_date: form.inspection_date || null,
         due_date: form.due_date || null,
       })
+      // 2. Nếu CAP status thay đổi hoặc có ghi chú / ảnh mới → lưu CAP update
+      const capChanged = capStatus !== (violation.cap_status || 'Chưa xử lý')
+      if (capChanged || capNote.trim() || newEvidenceUrl) {
+        await updateCapStatus(violation.id, capStatus, capNote, capUpdatedBy, newEvidenceUrl || undefined)
+      }
       onUpdated()
       onClose()
     } catch (err) {
@@ -81,7 +119,7 @@ function EditViolationModal({ violation, onClose, onUpdated }) {
           <button onClick={onClose} className="text-slate-400 hover:text-slate-600 text-2xl leading-none ml-3">×</button>
         </div>
 
-        <div className="p-5 space-y-4 max-h-[70vh] overflow-y-auto">
+        <div className="p-5 space-y-4 max-h-[75vh] overflow-y-auto">
           {/* Row 1: Ngày + Inspector */}
           <div className="grid grid-cols-2 gap-3">
             <div>
@@ -127,7 +165,7 @@ function EditViolationModal({ violation, onClose, onUpdated }) {
               className={`${inputCls} resize-none`} />
           </div>
 
-          {/* Severity + preview */}
+          {/* Severity */}
           <div>
             <label className={labelCls}>🚦 Mức độ nghiêm trọng</label>
             <div className="flex items-center gap-3">
@@ -141,7 +179,7 @@ function EditViolationModal({ violation, onClose, onUpdated }) {
             </div>
           </div>
 
-          {/* Row: Phòng chịu TN + Thời hạn */}
+          {/* Phòng chịu TN + Thời hạn */}
           <div className="grid grid-cols-2 gap-3">
             <div>
               <label className={labelCls}>🏢 Phòng chịu trách nhiệm</label>
@@ -165,6 +203,89 @@ function EditViolationModal({ violation, onClose, onUpdated }) {
               onChange={e => set('recorder', e.target.value)}
               placeholder="Tên người ghi nhận"
               className={inputCls} />
+          </div>
+
+          {/* ─── CAP UPDATE SECTION ────────────────────────────────────────── */}
+          <div className="bg-blue-50 border border-blue-100 rounded-xl p-4 space-y-3">
+            <div className="font-bold text-blue-900 text-sm">✅ Cập nhật trạng thái khắc phục (CAP)</div>
+
+            <div>
+              <label className={labelCls}>Trạng thái mới</label>
+              <select
+                value={capStatus}
+                onChange={e => setCapStatus(e.target.value)}
+                className={inputCls}
+              >
+                {CAP_STATUSES.map(s => (
+                  <option key={s.value} value={s.value}>{s.icon} {s.label}</option>
+                ))}
+              </select>
+            </div>
+
+            <div>
+              <label className={labelCls}>Ghi chú / mô tả biện pháp</label>
+              <textarea
+                value={capNote}
+                onChange={e => setCapNote(e.target.value)}
+                rows={2}
+                placeholder="Mô tả hành động đã thực hiện (không bắt buộc)..."
+                className={`${inputCls} resize-none`}
+              />
+            </div>
+
+            <div>
+              <label className={labelCls}>Người cập nhật CAP</label>
+              <input
+                value={capUpdatedBy}
+                onChange={e => setCapUpdatedBy(e.target.value)}
+                placeholder="Tên người cập nhật (không bắt buộc)"
+                className={inputCls}
+              />
+            </div>
+
+            <div>
+              <label className={labelCls}>📎 Ảnh bằng chứng khắc phục</label>
+              <div className="mt-1 flex flex-wrap items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => fileRef.current?.click()}
+                  className="bg-white border border-slate-200 text-slate-600 text-xs px-3 py-2 rounded-lg hover:bg-slate-50 transition-colors"
+                  disabled={uploading}
+                >
+                  {uploading ? '⏳ Đang tải...' : '📂 Upload từ máy'}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setShowManualUrl(v => !v)}
+                  className="bg-white border border-slate-200 text-blue-600 text-xs px-3 py-2 rounded-lg hover:bg-slate-50 transition-colors"
+                >
+                  🔗 Nhập URL ảnh
+                </button>
+                {newEvidenceUrl && <span className="text-green-600 text-xs font-semibold">✅ Đã có ảnh</span>}
+                <input ref={fileRef} type="file" accept="image/*" className="hidden" onChange={handleFileUpload} />
+              </div>
+              {uploadError && (
+                <div className="mt-1.5 text-xs text-red-600 bg-red-50 rounded p-2">{uploadError}</div>
+              )}
+              {showManualUrl && (
+                <div className="mt-2 flex gap-2">
+                  <input
+                    value={manualUrl}
+                    onChange={e => setManualUrl(e.target.value)}
+                    placeholder="Dán URL ảnh (Supabase, Drive, imgur...)"
+                    className="flex-1 border border-slate-200 rounded-lg px-3 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-blue-300"
+                  />
+                  <button
+                    type="button"
+                    onClick={handleManualUrl}
+                    className="bg-blue-600 text-white text-xs px-3 py-1.5 rounded-lg hover:bg-blue-700"
+                  >Dùng URL</button>
+                </div>
+              )}
+              <div className="mt-1.5 text-xs text-slate-400">
+                💡 Để trống nếu chưa có ảnh bằng chứng. CAP history sẽ được ghi lại khi bấm Lưu.
+              </div>
+            </div>
           </div>
         </div>
 
@@ -229,24 +350,13 @@ function DeleteConfirmModal({ violation, onClose, onDeleted }) {
   )
 }
 
-// ─── DETAIL MODAL ─────────────────────────────────────────────────────────────
-function ViolationModal({ violation, onClose, onUpdated }) {
-  const [status, setStatus] = useState(violation.cap_status || 'Chưa xử lý')
-  const [note, setNote] = useState('')
-  const [updatedBy, setUpdatedBy] = useState('')
-  const [uploading, setUploading] = useState(false)
-  const [uploadError, setUploadError] = useState('')
-  const [saving, setSaving] = useState(false)
-  const [evidenceUrl, setEvidenceUrl] = useState(violation.evidence_url || '')
-  const [newEvidenceUrl, setNewEvidenceUrl] = useState('')
-  const [manualUrl, setManualUrl] = useState('')
-  const [showManualUrl, setShowManualUrl] = useState(false)
-  const [history, setHistory] = useState(violation.cap_updates || [])
+// ─── DETAIL MODAL (chỉ xem — không có thao tác chỉnh sửa) ────────────────────
+function ViolationModal({ violation, onClose }) {
   const [resolvedImageUrl, setResolvedImageUrl] = useState(null)
   const [resolvingImage, setResolvingImage] = useState(false)
-  const fileRef = useRef()
+  const history = violation.cap_updates || []
+  const evidenceUrl = violation.evidence_url || ''
 
-  // Resolve Google Drive image path → public URL
   useEffect(() => {
     if (!violation.image_path || violation.image_path.startsWith('http')) {
       setResolvedImageUrl(violation.image_path || null)
@@ -261,42 +371,6 @@ function ViolationModal({ violation, onClose, onUpdated }) {
 
   const fmt = (d) => d ? new Date(d).toLocaleDateString('vi-VN', { day:'2-digit', month:'2-digit', year:'numeric' }) : '—'
 
-  async function handleFileUpload(e) {
-    const file = e.target.files?.[0]
-    if (!file) return
-    setUploading(true)
-    setUploadError('')
-    try {
-      const url = await uploadEvidenceImage(file, violation.id)
-      setNewEvidenceUrl(url)
-      setEvidenceUrl(url)
-    } catch (err) {
-      setUploadError('Lỗi upload: ' + err.message + ' — Thử dùng "Nhập URL" bên dưới')
-    } finally {
-      setUploading(false)
-    }
-  }
-
-  function handleManualUrl() {
-    if (!manualUrl.trim()) return
-    setNewEvidenceUrl(manualUrl.trim())
-    setEvidenceUrl(manualUrl.trim())
-    setShowManualUrl(false)
-  }
-
-  async function handleSave() {
-    setSaving(true)
-    try {
-      await updateCapStatus(violation.id, status, note, updatedBy, newEvidenceUrl || undefined)
-      onUpdated()
-      onClose()
-    } catch (err) {
-      alert('Lỗi cập nhật: ' + err.message)
-    } finally {
-      setSaving(false)
-    }
-  }
-
   return (
     <div className="fixed inset-0 z-50 flex items-start justify-center bg-black/50 p-4 pt-16 overflow-y-auto">
       <div className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl">
@@ -306,13 +380,14 @@ function ViolationModal({ violation, onClose, onUpdated }) {
             <div className="flex items-center gap-2 mb-1">
               <SeverityBadge severity={violation.severity} />
               <span className="text-xs text-slate-400 font-mono">{violation.audit_id}</span>
+              <span className="text-xs bg-slate-100 text-slate-500 px-2 py-0.5 rounded-full">Chỉ xem</span>
             </div>
             <h2 className="text-base font-bold text-slate-800 leading-snug">{violation.violation_detail}</h2>
           </div>
           <button onClick={onClose} className="text-slate-400 hover:text-slate-600 text-2xl ml-3 leading-none">×</button>
         </div>
 
-        <div className="p-5 space-y-4 max-h-[70vh] overflow-y-auto">
+        <div className="p-5 space-y-4 max-h-[75vh] overflow-y-auto">
           {/* Meta info */}
           <div className="grid grid-cols-2 gap-3 text-xs">
             {[
@@ -322,21 +397,28 @@ function ViolationModal({ violation, onClose, onUpdated }) {
               ['📅 Ngày kiểm tra', fmt(violation.inspection_date)],
               ['🏢 Phòng chịu TN', violation.responsible_dept],
               ['⏰ Thời hạn XL', fmt(violation.due_date)],
-            ].map(([label, val]) => (
-              <div key={label} className="bg-slate-50 rounded-lg p-2.5">
-                <div className="text-slate-400 mb-0.5">{label}</div>
-                <div className="font-semibold text-slate-700">{val || '—'}</div>
-              </div>
-            ))}
+              ['📝 Người ghi nhận', violation.recorder],
+              ['🚦 Trạng thái CAP', null],
+            ].map(([label, val]) =>
+              label === '🚦 Trạng thái CAP' ? (
+                <div key={label} className="bg-slate-50 rounded-lg p-2.5">
+                  <div className="text-slate-400 mb-0.5">{label}</div>
+                  <CapBadge status={violation.cap_status} />
+                </div>
+              ) : (
+                <div key={label} className="bg-slate-50 rounded-lg p-2.5">
+                  <div className="text-slate-400 mb-0.5">{label}</div>
+                  <div className="font-semibold text-slate-700">{val || '—'}</div>
+                </div>
+              )
+            )}
           </div>
 
-          {/* ─── ẢNH VI PHẠM GỐC (từ Google Sheet / Drive) ─── */}
+          {/* Ảnh vi phạm gốc */}
           <div className="border border-slate-200 rounded-xl overflow-hidden">
             <div className="bg-slate-50 px-3 py-2 border-b border-slate-100 flex items-center justify-between">
               <span className="text-xs font-semibold text-slate-600">📸 Ảnh vi phạm gốc</span>
-              {resolvingImage && (
-                <span className="text-xs text-slate-400 animate-pulse">⏳ Đang tải ảnh...</span>
-              )}
+              {resolvingImage && <span className="text-xs text-slate-400 animate-pulse">⏳ Đang tải ảnh...</span>}
             </div>
             {violation.image_path ? (
               <div className="p-3">
@@ -345,21 +427,14 @@ function ViolationModal({ violation, onClose, onUpdated }) {
                     <span className="text-slate-400 text-sm animate-pulse">Đang resolve ảnh Drive...</span>
                   </div>
                 ) : resolvedImageUrl ? (
-                  <img
-                    src={resolvedImageUrl}
-                    alt="Ảnh vi phạm"
+                  <img src={resolvedImageUrl} alt="Ảnh vi phạm"
                     className="w-full max-h-64 object-contain rounded-lg border border-slate-100 bg-slate-50"
-                    onError={(e) => {
-                      e.target.style.display = 'none'
-                      e.target.nextSibling.style.display = 'block'
-                    }}
+                    onError={e => { e.target.style.display='none'; e.target.nextSibling.style.display='block' }}
                   />
                 ) : null}
-                {/* Fallback nếu không resolve được */}
                 <div className={`text-xs text-amber-700 bg-amber-50 border border-amber-100 rounded-lg p-2.5 mt-2 ${resolvingImage || resolvedImageUrl ? 'hidden' : ''}`}>
                   <div className="font-medium mb-1">⚠️ Không tìm thấy ảnh trên Drive</div>
                   <div className="break-all font-mono text-amber-600">{violation.image_path.split('/').pop()}</div>
-                  <div className="mt-1 text-slate-400">Kiểm tra thư mục đã được share "Anyone with the link" chưa.</div>
                 </div>
               </div>
             ) : (
@@ -367,110 +442,25 @@ function ViolationModal({ violation, onClose, onUpdated }) {
             )}
           </div>
 
-          {/* ─── ẢNH BẰNG CHỨNG KHẮC PHỤC ─── */}
+          {/* Ảnh bằng chứng khắc phục */}
           {evidenceUrl && (
             <div className="border border-green-200 rounded-xl overflow-hidden">
               <div className="bg-green-50 px-3 py-2 border-b border-green-100">
                 <span className="text-xs font-semibold text-green-700">✅ Ảnh bằng chứng khắc phục</span>
               </div>
               <div className="p-3">
-                <img
-                  src={evidenceUrl}
-                  alt="Bằng chứng khắc phục"
+                <img src={evidenceUrl} alt="Bằng chứng khắc phục"
                   className="w-full max-h-56 object-contain rounded-lg border border-slate-200 bg-slate-50"
-                  onError={(e) => {
-                    e.target.style.display='none'
-                    e.target.parentElement.innerHTML += `<div class="text-xs text-red-500 p-2">⚠️ Không tải được ảnh.</div>`
-                  }}
+                  onError={e => { e.target.style.display='none'; e.target.parentElement.innerHTML += `<div class="text-xs text-red-500 p-2">⚠️ Không tải được ảnh.</div>` }}
                 />
               </div>
             </div>
           )}
 
-          {/* ─── CAP UPDATE FORM ─────────────────────────── */}
-          <div className="bg-blue-50 border border-blue-100 rounded-xl p-4 space-y-3">
-            <div className="font-bold text-blue-900 text-sm">✏️ Cập nhật trạng thái khắc phục (CAP)</div>
-
-            <div>
-              <label className="text-xs text-slate-600 font-medium">Trạng thái mới</label>
-              <select
-                value={status}
-                onChange={e => setStatus(e.target.value)}
-                className="w-full mt-1 border border-slate-200 rounded-lg px-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-blue-300"
-              >
-                {CAP_STATUSES.map(s => (
-                  <option key={s.value} value={s.value}>{s.icon} {s.label}</option>
-                ))}
-              </select>
-            </div>
-
-            <div>
-              <label className="text-xs text-slate-600 font-medium">Ghi chú / mô tả biện pháp</label>
-              <textarea
-                value={note}
-                onChange={e => setNote(e.target.value)}
-                rows={3}
-                placeholder="Mô tả hành động đã thực hiện..."
-                className="w-full mt-1 border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-300 resize-none"
-              />
-            </div>
-
-            <div>
-              <label className="text-xs text-slate-600 font-medium">Người cập nhật</label>
-              <input
-                value={updatedBy}
-                onChange={e => setUpdatedBy(e.target.value)}
-                placeholder="Tên người cập nhật"
-                className="w-full mt-1 border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-300"
-              />
-            </div>
-
-            <div>
-              <label className="text-xs text-slate-600 font-medium">📎 Ảnh bằng chứng khắc phục</label>
-              <div className="mt-1 flex flex-wrap items-center gap-2">
-                <button
-                  onClick={() => fileRef.current?.click()}
-                  className="bg-white border border-slate-200 text-slate-600 text-xs px-3 py-2 rounded-lg hover:bg-slate-50 transition-colors"
-                  disabled={uploading}
-                >
-                  {uploading ? '⏳ Đang tải...' : '📂 Upload từ máy'}
-                </button>
-                <button
-                  onClick={() => setShowManualUrl(v => !v)}
-                  className="bg-white border border-slate-200 text-blue-600 text-xs px-3 py-2 rounded-lg hover:bg-slate-50 transition-colors"
-                >
-                  🔗 Nhập URL ảnh
-                </button>
-                {newEvidenceUrl && <span className="text-green-600 text-xs font-semibold">✅ Đã có ảnh</span>}
-                <input ref={fileRef} type="file" accept="image/*" className="hidden" onChange={handleFileUpload} />
-              </div>
-              {uploadError && (
-                <div className="mt-1.5 text-xs text-red-600 bg-red-50 rounded p-2">{uploadError}</div>
-              )}
-              {showManualUrl && (
-                <div className="mt-2 flex gap-2">
-                  <input
-                    value={manualUrl}
-                    onChange={e => setManualUrl(e.target.value)}
-                    placeholder="Dán URL ảnh (Google Drive, imgur, ...)"
-                    className="flex-1 border border-slate-200 rounded-lg px-3 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-blue-300"
-                  />
-                  <button
-                    onClick={handleManualUrl}
-                    className="bg-blue-600 text-white text-xs px-3 py-1.5 rounded-lg hover:bg-blue-700"
-                  >Dùng URL</button>
-                </div>
-              )}
-              <div className="mt-1.5 text-xs text-slate-400">
-                💡 Google Drive: tải ảnh → Share → Anyone with link → Copy link
-              </div>
-            </div>
-          </div>
-
           {/* CAP History */}
-          {history.length > 0 && (
+          {history.length > 0 ? (
             <div>
-              <div className="text-xs font-semibold text-slate-500 mb-2">📜 Lịch sử cập nhật</div>
+              <div className="text-xs font-semibold text-slate-500 mb-2">📜 Lịch sử cập nhật CAP</div>
               <div className="space-y-2">
                 {[...history].reverse().map(h => (
                   <div key={h.id} className="bg-slate-50 rounded-lg p-2.5 text-xs">
@@ -488,23 +478,16 @@ function ViolationModal({ violation, onClose, onUpdated }) {
                 ))}
               </div>
             </div>
+          ) : (
+            <div className="text-xs text-slate-400 italic text-center py-2">Chưa có lịch sử cập nhật CAP</div>
           )}
         </div>
 
-        {/* Footer */}
-        <div className="p-5 border-t border-slate-100 flex justify-end gap-2">
-          <button
-            onClick={onClose}
-            className="px-4 py-2 text-sm border border-slate-200 rounded-lg text-slate-600 hover:bg-slate-50 transition-colors"
-          >
+        {/* Footer — chỉ có nút Đóng */}
+        <div className="p-4 border-t border-slate-100 flex justify-end">
+          <button onClick={onClose}
+            className="px-5 py-2 text-sm border border-slate-200 rounded-lg text-slate-600 hover:bg-slate-50 transition-colors">
             Đóng
-          </button>
-          <button
-            onClick={handleSave}
-            disabled={saving}
-            className="px-4 py-2 text-sm bg-blue-700 text-white rounded-lg hover:bg-blue-800 transition-colors disabled:opacity-50"
-          >
-            {saving ? '⏳ Đang lưu...' : '💾 Lưu cập nhật'}
           </button>
         </div>
       </div>
@@ -840,7 +823,6 @@ export default function ViolationList({ role = 'guest' }) {
         <ViolationModal
           violation={selected}
           onClose={() => setSelected(null)}
-          onUpdated={() => { setSelected(null); load() }}
         />
       )}
 
