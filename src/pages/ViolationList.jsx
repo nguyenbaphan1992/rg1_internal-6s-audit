@@ -617,7 +617,7 @@ export default function ViolationList({ role = 'guest' }) {
   async function handleExportPDF() {
     setExporting('pdf')
     try {
-      exportToPDF(filtered, buildFilterLabel())
+      await exportToPDF(filtered, buildFilterLabel())
     } catch (e) {
       alert('Lỗi xuất PDF: ' + e.message)
     } finally {

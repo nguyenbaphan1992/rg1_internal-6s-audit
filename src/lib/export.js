@@ -1,5 +1,5 @@
 import jsPDF from 'jspdf'
-import autoTable from 'jspdf-autotable'
+import html2canvas from 'html2canvas'
 import * as XLSX from 'xlsx'
 
 // ─── HELPERS ───────────────────────────────────────────────────────────────────
@@ -29,209 +29,288 @@ function computeStats(violations) {
   return { total, bySeverity, byCapStatus, byDept, capRate, closed }
 }
 
-function imageCell(v) {
-  if (v.evidence_url) return v.evidence_url
-  if (v.image_path) return v.image_path
-  return '—'
+// ─── SEVERITY STYLES ──────────────────────────────────────────────────────────
+const SEV_STYLE = {
+  Critical: 'background:#fee2e2;color:#dc2626;border:1px solid #fecaca',
+  High:     'background:#ffedd5;color:#ea580c;border:1px solid #fed7aa',
+  Medium:   'background:#fef9c3;color:#ca8a04;border:1px solid #fde68a',
+  Low:      'background:#dcfce7;color:#16a34a;border:1px solid #bbf7d0',
+}
+
+// ─── CAP STATUS STYLE ─────────────────────────────────────────────────────────
+const CAP_STYLE = {
+  'Chưa xử lý': 'background:#fee2e2;color:#dc2626',
+  'Đang xử lý': 'background:#dbeafe;color:#1d4ed8',
+  'Chờ duyệt':  'background:#fef9c3;color:#ca8a04',
+  'Đã đóng':    'background:#dcfce7;color:#16a34a',
+}
+
+// ─── HTML: PAGE 1 — DASHBOARD ─────────────────────────────────────────────────
+function buildDashboardHTML(stats, filterLabel) {
+  const now = new Date().toLocaleString('vi-VN')
+
+  const severityRows = Object.entries(stats.bySeverity)
+    .map(([k, v]) => `
+      <tr>
+        <td><span style="padding:2px 8px;border-radius:12px;font-size:11px;font-weight:600;${SEV_STYLE[k] || ''}">${k}</span></td>
+        <td style="text-align:center;font-weight:700">${v}</td>
+        <td style="text-align:center">${stats.total > 0 ? Math.round(v / stats.total * 100) : 0}%</td>
+      </tr>`).join('')
+
+  const capRows = Object.entries(stats.byCapStatus)
+    .map(([k, v]) => `
+      <tr>
+        <td><span style="padding:2px 8px;border-radius:12px;font-size:11px;font-weight:600;${CAP_STYLE[k] || 'background:#f1f5f9;color:#334155'}">${k}</span></td>
+        <td style="text-align:center;font-weight:700">${v}</td>
+        <td style="text-align:center">${stats.total > 0 ? Math.round(v / stats.total * 100) : 0}%</td>
+      </tr>`).join('')
+
+  const deptRows = Object.entries(stats.byDept)
+    .sort((a, b) => b[1].total - a[1].total)
+    .map(([dept, data]) => `
+      <tr>
+        <td style="font-weight:600">${dept}</td>
+        <td style="text-align:center;font-weight:700">${data.total}</td>
+        <td style="text-align:center">${data.closed}</td>
+        <td style="text-align:center">${data.total > 0 ? Math.round(data.closed / data.total * 100) : 0}%</td>
+      </tr>`).join('')
+
+  return `
+    <div style="font-family:'Segoe UI',Arial,'Helvetica Neue',sans-serif;font-size:12px;color:#1e293b;background:white;padding:0">
+      <!-- Header -->
+      <div style="background:#1e3a8a;color:white;padding:18px 24px">
+        <div style="font-size:16px;font-weight:700;letter-spacing:0.5px">HSE MONITOR — BÁO CÁO AN TOÀN</div>
+        <div style="font-size:11px;color:#bfdbfe;margin-top:4px">Nhà máy RG1 · Công ty TNHH May Tinh Lợi · Xuất lúc: ${now}</div>
+      </div>
+      <div style="height:4px;background:linear-gradient(to right,#dc2626,#ef4444,#dc2626)"></div>
+
+      <div style="padding:20px 24px">
+        ${filterLabel ? `<div style="font-size:11px;color:#64748b;margin-bottom:16px">🔍 Bộ lọc: <strong>${filterLabel}</strong></div>` : ''}
+
+        <!-- KPI Cards -->
+        <div style="display:flex;gap:12px;margin-bottom:24px">
+          ${[
+            { label: 'Tổng vi phạm', value: stats.total, color: '#1d4ed8', bg: '#eff6ff' },
+            { label: 'Critical',     value: stats.bySeverity.Critical || 0, color: '#dc2626', bg: '#fef2f2' },
+            { label: 'Đã đóng',      value: stats.closed, color: '#16a34a', bg: '#f0fdf4' },
+            { label: 'Tỷ lệ CAP',    value: stats.capRate + '%', color: '#b45309', bg: '#fffbeb' },
+          ].map(k => `
+            <div style="flex:1;background:${k.bg};border-radius:10px;padding:14px;text-align:center;border:1px solid ${k.bg}">
+              <div style="font-size:26px;font-weight:800;color:${k.color}">${k.value}</div>
+              <div style="font-size:11px;color:#64748b;margin-top:4px">${k.label}</div>
+            </div>`).join('')}
+        </div>
+
+        <!-- 2-column grid -->
+        <div style="display:flex;gap:20px;margin-bottom:20px">
+          <!-- Severity table -->
+          <div style="flex:1">
+            <div style="font-size:13px;font-weight:700;color:#1e3a8a;margin-bottom:8px">Vi phạm theo mức độ</div>
+            <table style="width:100%;border-collapse:collapse;font-size:11px">
+              <thead>
+                <tr style="background:#1e3a8a;color:white">
+                  <th style="padding:7px 10px;text-align:left;border-radius:4px 0 0 0">Mức độ</th>
+                  <th style="padding:7px 10px;text-align:center">Số lượng</th>
+                  <th style="padding:7px 10px;text-align:center;border-radius:0 4px 0 0">Tỷ lệ</th>
+                </tr>
+              </thead>
+              <tbody>${severityRows}</tbody>
+            </table>
+          </div>
+          <!-- CAP status table -->
+          <div style="flex:1">
+            <div style="font-size:13px;font-weight:700;color:#1e3a8a;margin-bottom:8px">Trạng thái CAP</div>
+            <table style="width:100%;border-collapse:collapse;font-size:11px">
+              <thead>
+                <tr style="background:#1e3a8a;color:white">
+                  <th style="padding:7px 10px;text-align:left">Trạng thái</th>
+                  <th style="padding:7px 10px;text-align:center">Số lượng</th>
+                  <th style="padding:7px 10px;text-align:center">Tỷ lệ</th>
+                </tr>
+              </thead>
+              <tbody>${capRows}</tbody>
+            </table>
+          </div>
+        </div>
+
+        <!-- Department table -->
+        <div>
+          <div style="font-size:13px;font-weight:700;color:#1e3a8a;margin-bottom:8px">Vi phạm theo bộ phận / khu vực</div>
+          <table style="width:100%;border-collapse:collapse;font-size:11px">
+            <thead>
+              <tr style="background:#1e3a8a;color:white">
+                <th style="padding:7px 10px;text-align:left">Bộ phận</th>
+                <th style="padding:7px 10px;text-align:center">Tổng</th>
+                <th style="padding:7px 10px;text-align:center">Đã đóng</th>
+                <th style="padding:7px 10px;text-align:center">Tỷ lệ đóng</th>
+              </tr>
+            </thead>
+            <tbody>${deptRows}</tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- Footer -->
+      <div style="background:#f8fafc;border-top:1px solid #e2e8f0;padding:8px 24px;font-size:10px;color:#94a3b8;text-align:center">
+        HSE Monitor · Nhà máy RG1 · Trang 1
+      </div>
+    </div>`
+}
+
+// ─── HTML: PAGE 2 — VIOLATIONS TABLE ─────────────────────────────────────────
+function buildViolationsHTML(violations, filterLabel) {
+  const now = new Date().toLocaleString('vi-VN')
+
+  const rows = violations.map((v, idx) => {
+    const imgSrc = v.evidence_url || v.image_path || ''
+    const imgCell = imgSrc
+      ? `<img src="${imgSrc}" style="max-width:80px;max-height:60px;object-fit:contain;border-radius:4px;border:1px solid #e2e8f0" crossorigin="anonymous" onerror="this.style.display='none';this.nextSibling.style.display='block'">`
+        + `<span style="display:none;font-size:10px;color:#94a3b8">Không tải được ảnh</span>`
+      : '<span style="color:#94a3b8;font-size:10px">Không có ảnh</span>'
+
+    const isOverdue = v.due_date && v.cap_status !== 'Đã đóng' && new Date(v.due_date) < new Date()
+    const rowBg = idx % 2 === 0 ? '#ffffff' : '#f8fafc'
+
+    return `
+      <tr style="background:${rowBg};border-bottom:1px solid #f1f5f9">
+        <td style="padding:8px;text-align:center;font-weight:600;color:#64748b">${idx + 1}</td>
+        <td style="padding:8px;font-weight:600">${v.department || '—'}</td>
+        <td style="padding:8px;line-height:1.4">${v.violation_detail || '—'}</td>
+        <td style="padding:8px;text-align:center">
+          <span style="padding:2px 8px;border-radius:12px;font-size:10px;font-weight:700;${SEV_STYLE[v.severity] || 'background:#f1f5f9;color:#334155'}">${v.severity || '—'}</span>
+        </td>
+        <td style="padding:8px;text-align:center">${imgCell}</td>
+        <td style="padding:8px">${v.responsible_dept || v.inspector || '—'}</td>
+        <td style="padding:8px;text-align:center;${isOverdue ? 'color:#dc2626;font-weight:700' : 'color:#64748b'}">${fmtDate(v.due_date)}${isOverdue ? '<br><span style="font-size:9px">⚠️ Quá hạn</span>' : ''}</td>
+      </tr>`
+  }).join('')
+
+  return `
+    <div style="font-family:'Segoe UI',Arial,'Helvetica Neue',sans-serif;font-size:11px;color:#1e293b;background:white;padding:0">
+      <!-- Header -->
+      <div style="background:#1e3a8a;color:white;padding:16px 20px">
+        <div style="font-size:15px;font-weight:700">DANH SÁCH ĐIỂM CHƯA TUÂN THỦ</div>
+        <div style="font-size:10px;color:#bfdbfe;margin-top:4px">RG1 · ${violations.length} vi phạm · ${now}${filterLabel ? ' · ' + filterLabel : ''}</div>
+      </div>
+      <div style="height:3px;background:linear-gradient(to right,#dc2626,#ef4444,#dc2626)"></div>
+
+      <div style="padding:16px 20px">
+        <table style="width:100%;border-collapse:collapse">
+          <thead>
+            <tr style="background:#1e3a8a;color:white;font-size:11px">
+              <th style="padding:8px 6px;text-align:center;width:32px">#</th>
+              <th style="padding:8px 6px;text-align:left;width:70px">Bộ phận</th>
+              <th style="padding:8px 6px;text-align:left">Chi tiết vi phạm</th>
+              <th style="padding:8px 6px;text-align:center;width:72px">Mức độ</th>
+              <th style="padding:8px 6px;text-align:center;width:90px">Hình ảnh</th>
+              <th style="padding:8px 6px;text-align:left;width:100px">Người phụ trách</th>
+              <th style="padding:8px 6px;text-align:center;width:76px">Hạn xử lý</th>
+            </tr>
+          </thead>
+          <tbody>${rows}</tbody>
+        </table>
+      </div>
+
+      <!-- Footer -->
+      <div style="background:#f8fafc;border-top:1px solid #e2e8f0;padding:8px 20px;font-size:10px;color:#94a3b8;text-align:center">
+        HSE Monitor · Nhà máy RG1 · Trang 2
+      </div>
+    </div>`
+}
+
+// ─── CANVAS → PDF (auto-pagination) ──────────────────────────────────────────
+function canvasToPDFPages(pdf, canvas, isFirstPage = false) {
+  const A4_W_MM = 210
+  const A4_H_MM = 297
+  const scale = canvas.width / A4_W_MM           // px per mm
+  const pageHeightPx = A4_H_MM * scale
+
+  let offsetY = 0
+  let pageIndex = 0
+
+  while (offsetY < canvas.height) {
+    if (!isFirstPage || pageIndex > 0) pdf.addPage()
+
+    const sliceH = Math.min(pageHeightPx, canvas.height - offsetY)
+    const pageCanvas = document.createElement('canvas')
+    pageCanvas.width = canvas.width
+    pageCanvas.height = sliceH
+
+    const ctx = pageCanvas.getContext('2d')
+    ctx.fillStyle = '#ffffff'
+    ctx.fillRect(0, 0, pageCanvas.width, pageCanvas.height)
+    ctx.drawImage(canvas, 0, offsetY, canvas.width, sliceH, 0, 0, canvas.width, sliceH)
+
+    const imgData = pageCanvas.toDataURL('image/jpeg', 0.92)
+    const renderedMM = sliceH / scale
+    pdf.addImage(imgData, 'JPEG', 0, 0, A4_W_MM, renderedMM)
+
+    offsetY += pageHeightPx
+    pageIndex++
+  }
 }
 
 // ─── EXPORT PDF ────────────────────────────────────────────────────────────────
-export function exportToPDF(violations, filterLabel = '') {
-  const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' })
+export async function exportToPDF(violations, filterLabel = '') {
   const stats = computeStats(violations)
-  const now = new Date().toLocaleDateString('vi-VN', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' })
 
-  const BLUE = [30, 64, 175]    // blue-800
-  const RED  = [220, 38, 38]    // red-600
-  const GRAY = [71, 85, 105]    // slate-600
+  // Container hidden offscreen
+  const wrap = document.createElement('div')
+  wrap.style.cssText = 'position:fixed;left:-9999px;top:0;width:794px;background:white;z-index:-1'
+  document.body.appendChild(wrap)
 
-  // ── PAGE 1: DASHBOARD ──────────────────────────────────────────────────────
-  // Header bar
-  doc.setFillColor(...BLUE)
-  doc.rect(0, 0, 210, 22, 'F')
-  doc.setFillColor(...RED)
-  doc.rect(0, 22, 210, 2, 'F')
+  const pdf = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' })
 
-  doc.setTextColor(255, 255, 255)
-  doc.setFontSize(14)
-  doc.setFont('helvetica', 'bold')
-  doc.text('HSE MONITOR — BÁO CÁO AN TOÀN', 105, 10, { align: 'center' })
-  doc.setFontSize(8)
-  doc.setFont('helvetica', 'normal')
-  doc.text(`Nhà máy RG1 · Công ty TNHH May Tinh Lợi · Xuất lúc: ${now}`, 105, 17, { align: 'center' })
+  try {
+    // ── Page 1: Dashboard ──
+    const div1 = document.createElement('div')
+    div1.innerHTML = buildDashboardHTML(stats, filterLabel)
+    wrap.appendChild(div1)
 
-  let y = 32
+    const canvas1 = await html2canvas(div1, {
+      scale: 2,
+      useCORS: true,
+      allowTaint: false,
+      backgroundColor: '#ffffff',
+      logging: false,
+    })
+    canvasToPDFPages(pdf, canvas1, true)
+    wrap.removeChild(div1)
 
-  // Filter label
-  if (filterLabel) {
-    doc.setTextColor(...GRAY)
-    doc.setFontSize(9)
-    doc.text(`Bộ lọc: ${filterLabel}`, 14, y)
-    y += 7
-  }
+    // ── Page 2+: Violations ──
+    const div2 = document.createElement('div')
+    div2.innerHTML = buildViolationsHTML(violations, filterLabel)
+    wrap.appendChild(div2)
 
-  // KPI row
-  const kpis = [
-    { label: 'Tổng vi phạm', value: String(stats.total), color: BLUE },
-    { label: 'Critical', value: String(stats.bySeverity.Critical || 0), color: RED },
-    { label: 'Đã đóng', value: String(stats.closed), color: [22, 163, 74] },
-    { label: 'Tỷ lệ CAP', value: `${stats.capRate}%`, color: [202, 138, 4] },
-  ]
+    // Wait for images to load
+    const imgs = div2.querySelectorAll('img')
+    if (imgs.length > 0) {
+      await Promise.all(Array.from(imgs).map(img =>
+        new Promise(resolve => {
+          if (img.complete) return resolve()
+          img.onload = resolve
+          img.onerror = resolve
+          setTimeout(resolve, 4000) // fallback timeout
+        })
+      ))
+    }
 
-  const boxW = 43
-  const boxH = 18
-  kpis.forEach((kpi, i) => {
-    const x = 14 + i * (boxW + 3)
-    doc.setFillColor(245, 247, 250)
-    doc.roundedRect(x, y, boxW, boxH, 2, 2, 'F')
-    doc.setDrawColor(220, 220, 230)
-    doc.roundedRect(x, y, boxW, boxH, 2, 2, 'S')
-    doc.setTextColor(...kpi.color)
-    doc.setFontSize(18)
-    doc.setFont('helvetica', 'bold')
-    doc.text(kpi.value, x + boxW / 2, y + 11, { align: 'center' })
-    doc.setFontSize(7)
-    doc.setFont('helvetica', 'normal')
-    doc.setTextColor(...GRAY)
-    doc.text(kpi.label, x + boxW / 2, y + 16, { align: 'center' })
-  })
-  y += boxH + 8
+    const canvas2 = await html2canvas(div2, {
+      scale: 2,
+      useCORS: true,
+      allowTaint: false,
+      backgroundColor: '#ffffff',
+      logging: false,
+    })
+    canvasToPDFPages(pdf, canvas2, false)
+    wrap.removeChild(div2)
 
-  // Section: By Severity
-  doc.setFontSize(10)
-  doc.setFont('helvetica', 'bold')
-  doc.setTextColor(...BLUE)
-  doc.text('Vi phạm theo mức độ nghiêm trọng', 14, y)
-  y += 2
-
-  autoTable(doc, {
-    startY: y,
-    head: [['Mức độ', 'Số lượng', 'Tỷ lệ']],
-    body: Object.entries(stats.bySeverity).map(([k, v]) => [
-      k, v, stats.total > 0 ? `${Math.round(v / stats.total * 100)}%` : '0%'
-    ]),
-    styles: { fontSize: 9, cellPadding: 3 },
-    headStyles: { fillColor: BLUE, textColor: [255, 255, 255], fontStyle: 'bold' },
-    alternateRowStyles: { fillColor: [248, 250, 252] },
-    margin: { left: 14, right: 14 },
-    tableWidth: 80,
-    theme: 'grid',
-  })
-  y = doc.lastAutoTable.finalY + 8
-
-  // Section: By CAP Status
-  doc.setFontSize(10)
-  doc.setFont('helvetica', 'bold')
-  doc.setTextColor(...BLUE)
-  doc.text('Trạng thái khắc phục (CAP)', 14, y)
-  y += 2
-
-  autoTable(doc, {
-    startY: y,
-    head: [['Trạng thái', 'Số lượng', 'Tỷ lệ']],
-    body: Object.entries(stats.byCapStatus).map(([k, v]) => [
-      k, v, stats.total > 0 ? `${Math.round(v / stats.total * 100)}%` : '0%'
-    ]),
-    styles: { fontSize: 9, cellPadding: 3 },
-    headStyles: { fillColor: BLUE, textColor: [255, 255, 255], fontStyle: 'bold' },
-    alternateRowStyles: { fillColor: [248, 250, 252] },
-    margin: { left: 14, right: 14 },
-    tableWidth: 80,
-    theme: 'grid',
-  })
-  y = doc.lastAutoTable.finalY + 8
-
-  // Section: By Department
-  doc.setFontSize(10)
-  doc.setFont('helvetica', 'bold')
-  doc.setTextColor(...BLUE)
-  doc.text('Vi phạm theo bộ phận / khu vực', 14, y)
-  y += 2
-
-  autoTable(doc, {
-    startY: y,
-    head: [['Bộ phận', 'Tổng vi phạm', 'Đã đóng', 'Tỷ lệ đóng']],
-    body: Object.entries(stats.byDept).sort((a, b) => b[1].total - a[1].total).map(([dept, data]) => [
-      dept,
-      data.total,
-      data.closed,
-      data.total > 0 ? `${Math.round(data.closed / data.total * 100)}%` : '0%',
-    ]),
-    styles: { fontSize: 9, cellPadding: 3 },
-    headStyles: { fillColor: BLUE, textColor: [255, 255, 255], fontStyle: 'bold' },
-    alternateRowStyles: { fillColor: [248, 250, 252] },
-    margin: { left: 14, right: 14 },
-    theme: 'grid',
-  })
-
-  // ── PAGE 2: VIOLATIONS TABLE ─────────────────────────────────────────────────
-  doc.addPage()
-
-  // Header bar page 2
-  doc.setFillColor(...BLUE)
-  doc.rect(0, 0, 210, 22, 'F')
-  doc.setFillColor(...RED)
-  doc.rect(0, 22, 210, 2, 'F')
-  doc.setTextColor(255, 255, 255)
-  doc.setFontSize(13)
-  doc.setFont('helvetica', 'bold')
-  doc.text('DANH SÁCH CÁC ĐIỂM CHƯA TUÂN THỦ', 105, 10, { align: 'center' })
-  doc.setFontSize(8)
-  doc.setFont('helvetica', 'normal')
-  doc.text(`Tổng cộng ${violations.length} vi phạm · ${now}`, 105, 17, { align: 'center' })
-
-  autoTable(doc, {
-    startY: 28,
-    head: [[
-      { content: 'STT', styles: { halign: 'center', cellWidth: 10 } },
-      { content: 'Bộ phận', styles: { cellWidth: 22 } },
-      { content: 'Chi tiết vi phạm', styles: { cellWidth: 60 } },
-      { content: 'Mức độ', styles: { halign: 'center', cellWidth: 22 } },
-      { content: 'Hình ảnh', styles: { cellWidth: 30 } },
-      { content: 'Người phụ trách', styles: { cellWidth: 28 } },
-      { content: 'Hạn XL', styles: { halign: 'center', cellWidth: 22 } },
-    ]],
-    body: violations.map((v, idx) => [
-      { content: idx + 1, styles: { halign: 'center' } },
-      v.department || '—',
-      v.violation_detail || '—',
-      { content: v.severity || '—', styles: { halign: 'center' } },
-      v.evidence_url
-        ? 'Xem ảnh (Supabase)'
-        : v.image_path
-          ? `Drive: ${v.image_path.split('/').pop() || '—'}`
-          : '—',
-      v.responsible_dept || v.inspector || '—',
-      { content: fmtDate(v.due_date), styles: { halign: 'center' } },
-    ]),
-    styles: { fontSize: 7.5, cellPadding: 2.5, overflow: 'linebreak' },
-    headStyles: { fillColor: BLUE, textColor: [255, 255, 255], fontStyle: 'bold', fontSize: 8 },
-    alternateRowStyles: { fillColor: [248, 250, 252] },
-    margin: { left: 6, right: 6 },
-    theme: 'grid',
-    didParseCell(data) {
-      // Color severity cells
-      if (data.section === 'body' && data.column.index === 3) {
-        const val = data.cell.raw?.content || data.cell.raw
-        if (val === 'Critical') { data.cell.styles.textColor = [220, 38, 38]; data.cell.styles.fillColor = [254, 226, 226] }
-        else if (val === 'High') { data.cell.styles.textColor = [234, 88, 12]; data.cell.styles.fillColor = [255, 237, 213] }
-        else if (val === 'Medium') { data.cell.styles.textColor = [202, 138, 4]; data.cell.styles.fillColor = [254, 249, 195] }
-        else if (val === 'Low') { data.cell.styles.textColor = [22, 163, 74]; data.cell.styles.fillColor = [220, 252, 231] }
-      }
-    },
-  })
-
-  // Footer pages
-  const totalPages = doc.internal.getNumberOfPages()
-  for (let i = 1; i <= totalPages; i++) {
-    doc.setPage(i)
-    doc.setFontSize(7)
-    doc.setTextColor(150, 150, 150)
-    doc.text(`Trang ${i} / ${totalPages} · HSE Monitor RG1`, 105, 292, { align: 'center' })
+  } finally {
+    document.body.removeChild(wrap)
   }
 
   const filename = `HSE_Report_RG1_${new Date().toISOString().slice(0, 10)}.pdf`
-  doc.save(filename)
+  pdf.save(filename)
 }
 
 // ─── EXPORT EXCEL ──────────────────────────────────────────────────────────────
@@ -286,7 +365,7 @@ export function exportToExcel(violations, filterLabel = '') {
     'Chi tiết vi phạm / điểm chưa tuân thủ',
     'Mức độ nghiêm trọng',
     'Người kiểm tra', 'Người phụ trách xử lý',
-    'Hình ảnh vi phạm',
+    'Link hình ảnh vi phạm',
     'Thời hạn xử lý', 'Trạng thái CAP',
     'Ngày đóng',
   ]
@@ -300,7 +379,7 @@ export function exportToExcel(violations, filterLabel = '') {
     v.severity || '',
     v.inspector || '',
     v.responsible_dept || '',
-    imageCell(v),
+    v.evidence_url || v.image_path || '',
     fmtDate(v.due_date),
     v.cap_status || '',
     fmtDate(v.closed_at),
@@ -312,11 +391,10 @@ export function exportToExcel(violations, filterLabel = '') {
     { wch: 50 },
     { wch: 12 },
     { wch: 20 }, { wch: 20 },
-    { wch: 40 },
+    { wch: 50 },
     { wch: 14 }, { wch: 16 },
     { wch: 14 },
   ]
-  // Bold header row
   XLSX.utils.book_append_sheet(wb, wsVio, 'Vi phạm')
 
   const filename = `HSE_Report_RG1_${new Date().toISOString().slice(0, 10)}.xlsx`
