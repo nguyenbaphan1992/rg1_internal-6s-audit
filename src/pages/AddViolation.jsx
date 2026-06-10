@@ -1,20 +1,20 @@
 import { useState, useRef } from 'react'
 import { createViolation, updateViolation, uploadEvidenceImage } from '../lib/api'
 import {
-  RG1_DEPARTMENTS, INSPECTION_CATEGORIES, SEVERITY_LEVELS
+  RG1_DEPARTMENTS, INSPECTION_CATEGORIES, SEVERITY_LEVELS, INSPECTORS
 } from '../lib/constants'
 
 export default function AddViolation({ onNavigate }) {
   const [form, setForm] = useState({
     inspection_date: new Date().toISOString().split('T')[0],
-    inspector: '',
+    inspector: INSPECTORS[0],
     department: '',
     inspection_category: '',
     violation_detail: '',
     responsible_dept: '',
     due_date: '',
     severity: 'Medium',
-    recorder: '',
+    recorder: 'Nguyễn Bá Phan',
     cap_status: 'Chưa xử lý',
     factory: 'RG1',
   })
@@ -132,9 +132,10 @@ export default function AddViolation({ onNavigate }) {
           </div>
           <div>
             <label className={labelCls}>👤 Người kiểm tra</label>
-            <input type="text" className={inputCls} value={form.inspector}
-              placeholder="Tên người kiểm tra"
-              onChange={e => set('inspector', e.target.value)} />
+            <select className={inputCls} value={form.inspector}
+              onChange={e => set('inspector', e.target.value)}>
+              {INSPECTORS.map(name => <option key={name} value={name}>{name}</option>)}
+            </select>
           </div>
         </div>
 

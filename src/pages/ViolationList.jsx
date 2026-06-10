@@ -558,7 +558,8 @@ function FilterBar({ filters, onChange }) {
 }
 
 // ─── MAIN PAGE ────────────────────────────────────────────────────────────────
-export default function ViolationList() {
+export default function ViolationList({ role = 'guest' }) {
+  const canEdit = role === 'admin'
   const [violations, setViolations] = useState([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
@@ -694,16 +695,20 @@ export default function ViolationList() {
                               title="Xem chi tiết"
                               className="px-2 py-1 text-blue-600 hover:bg-blue-50 rounded-lg transition-colors font-medium"
                             >👁</button>
-                            <button
-                              onClick={() => setEditing(v)}
-                              title="Chỉnh sửa"
-                              className="px-2 py-1 text-amber-600 hover:bg-amber-50 rounded-lg transition-colors font-medium"
-                            >✏️</button>
-                            <button
-                              onClick={() => setDeleting(v)}
-                              title="Xóa"
-                              className="px-2 py-1 text-red-500 hover:bg-red-50 rounded-lg transition-colors font-medium"
-                            >🗑️</button>
+                            {canEdit && (
+                              <button
+                                onClick={() => setEditing(v)}
+                                title="Chỉnh sửa"
+                                className="px-2 py-1 text-amber-600 hover:bg-amber-50 rounded-lg transition-colors font-medium"
+                              >✏️</button>
+                            )}
+                            {canEdit && (
+                              <button
+                                onClick={() => setDeleting(v)}
+                                title="Xóa"
+                                className="px-2 py-1 text-red-500 hover:bg-red-50 rounded-lg transition-colors font-medium"
+                              >🗑️</button>
+                            )}
                           </div>
                         </td>
                       </tr>
@@ -749,14 +754,18 @@ export default function ViolationList() {
                       onClick={() => setSelected(v)}
                       className="flex-1 py-1.5 text-xs text-blue-600 border border-blue-200 rounded-lg hover:bg-blue-50 transition-colors font-medium"
                     >👁 Xem</button>
-                    <button
-                      onClick={() => setEditing(v)}
-                      className="flex-1 py-1.5 text-xs text-amber-600 border border-amber-200 rounded-lg hover:bg-amber-50 transition-colors font-medium"
-                    >✏️ Sửa</button>
-                    <button
-                      onClick={() => setDeleting(v)}
-                      className="flex-1 py-1.5 text-xs text-red-500 border border-red-200 rounded-lg hover:bg-red-50 transition-colors font-medium"
-                    >🗑️ Xóa</button>
+                    {canEdit && (
+                      <button
+                        onClick={() => setEditing(v)}
+                        className="flex-1 py-1.5 text-xs text-amber-600 border border-amber-200 rounded-lg hover:bg-amber-50 transition-colors font-medium"
+                      >✏️ Sửa</button>
+                    )}
+                    {canEdit && (
+                      <button
+                        onClick={() => setDeleting(v)}
+                        className="flex-1 py-1.5 text-xs text-red-500 border border-red-200 rounded-lg hover:bg-red-50 transition-colors font-medium"
+                      >🗑️ Xóa</button>
+                    )}
                   </div>
                 </div>
               )

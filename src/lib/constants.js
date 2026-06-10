@@ -1,8 +1,18 @@
 // Danh sách bộ phận nhà máy RG1
 export const RG1_DEPARTMENTS = [
-  '1U01', '1U02', '1U03', '1U04', '1U05',
+  '1U01', '1U02', '1U03', '1U04', '1U05', '1U06',
   '1K01', '1W01', '1MT1',
-  'Dorm', 'Public_area'
+  'Canteen', 'Dorm', 'Public_area'
+]
+
+// Danh sách người kiểm tra
+export const INSPECTORS = [
+  'Nguyễn Sơn Tùng',
+  'Trần Văn Quang',
+  'Trần Văn Hoàng Quân',
+  'Tống Thế Hồng',
+  'Nguyễn Bá Phan',
+  'Bùi Quang Dương',
 ]
 
 // Hạng mục kiểm tra
