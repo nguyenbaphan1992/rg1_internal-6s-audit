@@ -70,18 +70,18 @@ export default function AddViolation({ onNavigate }) {
       const created = await createViolation(payload)
 
       // 2. Upload ảnh nếu có
-      let evidenceUrl = imageUrl.trim() || null
+      let imageFinalUrl = imageUrl.trim() || null
       if (imageFile && created?.id) {
         try {
-          evidenceUrl = await uploadEvidenceImage(imageFile, created.id)
+          imageFinalUrl = await uploadEvidenceImage(imageFile, created.id)
         } catch (uploadErr) {
           setUploadError('Lưu vi phạm thành công, nhưng upload ảnh thất bại: ' + uploadErr.message)
         }
       }
 
-      // 3. Cập nhật evidence_url nếu có ảnh
-      if (evidenceUrl && created?.id) {
-        await updateViolation(created.id, { evidence_url: evidenceUrl })
+      // 3. Lưu vào image_path (ảnh vi phạm gốc, không phải evidence CAP)
+      if (imageFinalUrl && created?.id) {
+        await updateViolation(created.id, { image_path: imageFinalUrl })
       }
 
       setSuccess(true)

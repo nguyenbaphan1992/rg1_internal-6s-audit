@@ -356,6 +356,8 @@ function ViolationModal({ violation, onClose }) {
   const [resolvingImage, setResolvingImage] = useState(false)
   const history = violation.cap_updates || []
   const evidenceUrl = violation.evidence_url || ''
+  // Ghi chú mới nhất từ cap_updates (sắp xếp tăng dần → phần tử cuối là mới nhất)
+  const latestNote = [...history].reverse().find(h => h.note)?.note || ''
 
   useEffect(() => {
     if (!violation.image_path || violation.image_path.startsWith('http')) {
@@ -413,6 +415,14 @@ function ViolationModal({ violation, onClose }) {
               )
             )}
           </div>
+
+          {/* Ghi chú biện pháp CAP mới nhất */}
+          {latestNote && (
+            <div className="bg-blue-50 border border-blue-100 rounded-xl px-4 py-3">
+              <div className="text-xs font-semibold text-blue-700 mb-1">📝 Ghi chú / mô tả biện pháp</div>
+              <div className="text-sm text-slate-700 italic">"{latestNote}"</div>
+            </div>
+          )}
 
           {/* Ảnh vi phạm gốc */}
           <div className="border border-slate-200 rounded-xl overflow-hidden">
