@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import Layout from './components/Layout'
 import Dashboard from './pages/Dashboard'
 import ViolationList from './pages/ViolationList'
@@ -6,10 +6,22 @@ import AddViolation from './pages/AddViolation'
 import ImportSheet from './pages/ImportSheet'
 import LoginScreen from './pages/LoginScreen'
 import { getRole } from './lib/auth'
+import { initTheme, toggleTheme, getTheme } from './lib/theme'
 
 function App() {
   const [page, setPage] = useState('dashboard')
   const [role, setRole] = useState(() => getRole())
+  const [theme, setTheme] = useState(() => getTheme())
+
+  // Áp dụng theme khi app mount
+  useEffect(() => {
+    initTheme()
+  }, [])
+
+  function handleToggleTheme() {
+    const next = toggleTheme()
+    setTheme(next)
+  }
 
   function handleLogin(newRole) {
     setRole(newRole)
@@ -40,7 +52,14 @@ function App() {
   }
 
   return (
-    <Layout currentPage={page} onNavigate={setPage} role={role} onLogout={handleLogout}>
+    <Layout
+      currentPage={page}
+      onNavigate={setPage}
+      role={role}
+      onLogout={handleLogout}
+      theme={theme}
+      onToggleTheme={handleToggleTheme}
+    >
       {renderPage()}
     </Layout>
   )

@@ -1,23 +1,24 @@
 import { useState } from 'react'
 
-// Nav items theo role
+// Nav items theo role (English menu)
 function getNavItems(role) {
   const all = [
-    { id: 'dashboard',  label: 'Tổng quan',         icon: '📊' },
-    { id: 'violations', label: 'Danh sách vi phạm',  icon: '📋' },
-    { id: 'add',        label: 'Ghi nhận vi phạm',   icon: '➕', adminOnly: true },
-    { id: 'import',     label: 'Import Google Sheet', icon: '📥', adminOnly: true },
+    { id: 'dashboard',  label: 'Dashboard',  icon: '📊' },
+    { id: 'violations', label: 'Issues',      icon: '📋' },
+    { id: 'add',        label: 'Add Issue',   icon: '➕', adminOnly: true },
+    { id: 'import',     label: 'Import',      icon: '📥', adminOnly: true },
   ]
   return role === 'admin' ? all : all.filter(i => !i.adminOnly)
 }
 
-export default function Layout({ currentPage, onNavigate, children, role, onLogout }) {
+export default function Layout({ currentPage, onNavigate, children, role, onLogout, theme, onToggleTheme }) {
   const [mobileOpen, setMobileOpen] = useState(false)
   const navItems = getNavItems(role)
+  const isDark = theme === 'dark'
 
   const roleLabel = role === 'admin'
     ? { text: 'Admin', cls: 'bg-green-600 text-white' }
-    : { text: 'Khách', cls: 'bg-amber-500 text-white' }
+    : { text: 'Guest', cls: 'bg-amber-500 text-white' }
 
   return (
     <div className="min-h-screen bg-slate-100 flex flex-col">
@@ -53,7 +54,7 @@ export default function Layout({ currentPage, onNavigate, children, role, onLogo
               </div>
               <div>
                 <div className="font-bold text-sm leading-tight">HSE Monitor</div>
-                <div className="text-blue-200 text-xs leading-tight">Nhà máy RG1 · Tinh Lợi</div>
+                <div className="text-blue-200 text-xs leading-tight">RG1 · Tinh Lợi</div>
               </div>
             </div>
           </div>
@@ -76,8 +77,17 @@ export default function Layout({ currentPage, onNavigate, children, role, onLogo
             ))}
           </nav>
 
-          {/* Right side: role badge + logout */}
+          {/* Right side: dark mode toggle + role badge + logout */}
           <div className="flex items-center gap-2">
+            {/* Dark mode toggle */}
+            <button
+              onClick={onToggleTheme}
+              title={isDark ? 'Chuyển sang Light Mode' : 'Chuyển sang Dark Mode'}
+              className="text-blue-200 hover:text-white p-1.5 rounded hover:bg-blue-800 transition-colors text-base leading-none"
+            >
+              {isDark ? '☀️' : '🌙'}
+            </button>
+
             <span className={`text-xs px-2 py-1 rounded-full font-semibold ${roleLabel.cls}`}>
               {roleLabel.text}
             </span>
@@ -108,12 +118,20 @@ export default function Layout({ currentPage, onNavigate, children, role, onLogo
                 {item.label}
               </button>
             ))}
-            <button
-              onClick={() => { onLogout(); setMobileOpen(false) }}
-              className="w-full text-left px-3 py-2.5 rounded text-sm font-medium text-red-300 hover:bg-blue-700 mt-1"
-            >
-              🚪 Đăng xuất
-            </button>
+            <div className="flex gap-2 mt-2 pt-2 border-t border-blue-700">
+              <button
+                onClick={() => { onToggleTheme(); setMobileOpen(false) }}
+                className="flex-1 text-left px-3 py-2 text-sm text-blue-200 hover:bg-blue-700 rounded"
+              >
+                {isDark ? '☀️ Light Mode' : '🌙 Dark Mode'}
+              </button>
+              <button
+                onClick={() => { onLogout(); setMobileOpen(false) }}
+                className="flex-1 text-left px-3 py-2 text-sm text-red-300 hover:bg-blue-700 rounded"
+              >
+                🚪 Đăng xuất
+              </button>
+            </div>
           </div>
         )}
       </header>

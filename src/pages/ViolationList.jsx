@@ -4,6 +4,7 @@ import {
   RG1_DEPARTMENTS, INSPECTION_CATEGORIES, SEVERITY_LEVELS, CAP_STATUSES,
   getSeverityConfig, getCapStatusConfig
 } from '../lib/constants'
+import { exportToPDF, exportToExcel } from '../lib/export'
 
 // ─── SEVERITY BADGE ───────────────────────────────────────────────────────────
 function SeverityBadge({ severity }) {
@@ -566,6 +567,7 @@ export default function ViolationList({ role = 'guest' }) {
   const [selected, setSelected] = useState(null)      // view modal
   const [editing, setEditing] = useState(null)        // edit modal
   const [deleting, setDeleting] = useState(null)      // delete modal
+  const [exporting, setExporting] = useState(null)    // 'pdf' | 'excel' | null
   const now = new Date()
 
   const [filters, setFilters] = useState({
@@ -602,6 +604,38 @@ export default function ViolationList({ role = 'guest' }) {
 
   const fmt = (d) => d ? new Date(d).toLocaleDateString('vi-VN') : '—'
 
+  function buildFilterLabel() {
+    const parts = []
+    if (filters.year) parts.push(`Năm ${filters.year}`)
+    if (filters.month) parts.push(`Tháng ${filters.month}`)
+    if (filters.department !== 'all') parts.push(`BP: ${filters.department}`)
+    if (filters.severity !== 'all') parts.push(`Mức độ: ${filters.severity}`)
+    if (filters.capStatus !== 'all') parts.push(`CAP: ${filters.capStatus}`)
+    return parts.join(' · ')
+  }
+
+  async function handleExportPDF() {
+    setExporting('pdf')
+    try {
+      exportToPDF(filtered, buildFilterLabel())
+    } catch (e) {
+      alert('Lỗi xuất PDF: ' + e.message)
+    } finally {
+      setExporting(null)
+    }
+  }
+
+  async function handleExportExcel() {
+    setExporting('excel')
+    try {
+      exportToExcel(filtered, buildFilterLabel())
+    } catch (e) {
+      alert('Lỗi xuất Excel: ' + e.message)
+    } finally {
+      setExporting(null)
+    }
+  }
+
   const filtered = violations.filter(v => {
     if (!filters.search) return true
     const q = filters.search.toLowerCase()
@@ -622,15 +656,36 @@ export default function ViolationList({ role = 'guest' }) {
       {/* Header */}
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
-          <h1 className="text-xl font-bold text-blue-900">📋 Danh sách vi phạm — RG1</h1>
+          <h1 className="text-xl font-bold text-blue-900">📋 Issues — RG1</h1>
           <p className="text-sm text-slate-500 mt-0.5">
             {filtered.length} vi phạm · {open} chưa xử lý · {critical} critical · {closed} đã đóng
           </p>
         </div>
-        <button onClick={load}
-          className="text-sm bg-blue-700 text-white px-3 py-1.5 rounded-lg hover:bg-blue-800 transition-colors">
-          🔄 Làm mới
-        </button>
+        <div className="flex flex-wrap gap-2">
+          {/* Export buttons — admin only */}
+          {canEdit && (
+            <>
+              <button
+                onClick={handleExportPDF}
+                disabled={!!exporting || filtered.length === 0}
+                className="flex items-center gap-1.5 text-sm bg-red-600 text-white px-3 py-1.5 rounded-lg hover:bg-red-700 transition-colors disabled:opacity-50"
+              >
+                {exporting === 'pdf' ? '⏳' : '📄'} Export PDF
+              </button>
+              <button
+                onClick={handleExportExcel}
+                disabled={!!exporting || filtered.length === 0}
+                className="flex items-center gap-1.5 text-sm bg-green-700 text-white px-3 py-1.5 rounded-lg hover:bg-green-800 transition-colors disabled:opacity-50"
+              >
+                {exporting === 'excel' ? '⏳' : '📊'} Export Excel
+              </button>
+            </>
+          )}
+          <button onClick={load}
+            className="text-sm bg-blue-700 text-white px-3 py-1.5 rounded-lg hover:bg-blue-800 transition-colors">
+            🔄 Refresh
+          </button>
+        </div>
       </div>
 
       <FilterBar filters={filters} onChange={setFilters} />
