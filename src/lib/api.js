@@ -20,10 +20,18 @@ export async function fetchViolations({ department, severity, capStatus, month, 
   if (capStatus && capStatus !== 'all') {
     query = query.eq('cap_status', capStatus)
   }
-  if (month && year) {
-    const start = new Date(year, month - 1, 1).toISOString()
-    const end   = new Date(year, month, 0, 23, 59, 59).toISOString()
-    query = query.gte('inspection_date', start).lte('inspection_date', end)
+  if (year) {
+    if (month) {
+      // Lọc theo tháng cụ thể
+      const start = new Date(year, month - 1, 1).toISOString()
+      const end   = new Date(year, month, 0, 23, 59, 59).toISOString()
+      query = query.gte('inspection_date', start).lte('inspection_date', end)
+    } else {
+      // Tất cả tháng — vẫn lọc theo năm
+      const start = new Date(year, 0, 1).toISOString()
+      const end   = new Date(year, 11, 31, 23, 59, 59).toISOString()
+      query = query.gte('inspection_date', start).lte('inspection_date', end)
+    }
   }
 
   const { data, error } = await query
@@ -108,10 +116,16 @@ export async function updateCapStatus(id, newStatus, note, updatedBy, evidenceUr
 export async function fetchDashboardStats({ month, year } = {}) {
   let query = supabase.from('violations').select('severity, cap_status, department, inspection_category')
 
-  if (month && year) {
-    const start = new Date(year, month - 1, 1).toISOString()
-    const end   = new Date(year, month, 0, 23, 59, 59).toISOString()
-    query = query.gte('inspection_date', start).lte('inspection_date', end)
+  if (year) {
+    if (month) {
+      const start = new Date(year, month - 1, 1).toISOString()
+      const end   = new Date(year, month, 0, 23, 59, 59).toISOString()
+      query = query.gte('inspection_date', start).lte('inspection_date', end)
+    } else {
+      const start = new Date(year, 0, 1).toISOString()
+      const end   = new Date(year, 11, 31, 23, 59, 59).toISOString()
+      query = query.gte('inspection_date', start).lte('inspection_date', end)
+    }
   }
 
   const { data, error } = await query
