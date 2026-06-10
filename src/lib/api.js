@@ -170,7 +170,7 @@ export async function fetchRecentViolationsWithImages(limit = 20) {
 }
 
 // =============================================
-// GOOGLE DRIVE IMAGE RESOLVER
+// GOOGLE DRIVE IMAGE RESOLVER (via GAS Proxy)
 // =============================================
 
 // In-memory cache: filename → public URL (or null if not found)
@@ -187,25 +187,26 @@ export async function resolveGDriveImageUrl(imagePath) {
   // Cache hit
   if (fileName in _driveCache) return _driveCache[fileName]
 
-  const folderId = import.meta.env.VITE_GDRIVE_FOLDER_ID
-  const apiKey   = import.meta.env.VITE_GDRIVE_API_KEY
-  if (!folderId || !apiKey) return null
+  const proxyUrl = import.meta.env.VITE_GAS_PROXY_URL
+  if (!proxyUrl) {
+    console.warn('VITE_GAS_PROXY_URL chưa được cấu hình')
+    return null
+  }
 
   try {
-    // Tìm file theo tên trong Drive (tìm trong folder và các subfolder của nó)
-    const q = encodeURIComponent(`name='${fileName}' and trashed=false`)
     const res = await fetch(
-      `https://www.googleapis.com/drive/v3/files?q=${q}&fields=files(id,name)&key=${apiKey}&pageSize=1&corpora=allDrives&includeItemsFromAllDrives=true&supportsAllDrives=true`
+      `${proxyUrl}?file=${encodeURIComponent(fileName)}`,
+      { redirect: 'follow' }
     )
     const data = await res.json()
 
-    if (data.files?.length > 0) {
-      const url = `https://drive.google.com/uc?export=view&id=${data.files[0].id}`
-      _driveCache[fileName] = url
-      return url
+    if (data.url) {
+      _driveCache[fileName] = data.url
+      return data.url
     }
+    console.warn('GAS proxy không tìm thấy file:', fileName, data)
   } catch (e) {
-    console.warn('GDrive resolve error:', e)
+    console.warn('GAS proxy error:', e)
   }
 
   _driveCache[fileName] = null
