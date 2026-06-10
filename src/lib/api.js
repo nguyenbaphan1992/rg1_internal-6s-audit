@@ -249,7 +249,7 @@ export async function importFromGoogleSheet() {
     const dueDate        = obj['Thời hạn xử lý'] || obj[headers[7]]
     const severityRaw    = obj['Mức độ nghiêm trọng'] || obj[headers[8]]
     const recorder       = obj['Người ghi nhận / duyệt'] || obj[headers[9]]
-    const imagePath      = obj[headers[10]] || ''
+    const imagePath      = obj['Hình ảnh vi phạm/chưa tuân thủ'] || obj[headers[10]] || ''
 
     if (!auditId) continue
 

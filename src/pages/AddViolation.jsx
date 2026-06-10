@@ -1,5 +1,5 @@
-import { useState } from 'react'
-import { createViolation } from '../lib/api'
+import { useState, useRef } from 'react'
+import { createViolation, updateViolation, uploadEvidenceImage } from '../lib/api'
 import {
   RG1_DEPARTMENTS, INSPECTION_CATEGORIES, SEVERITY_LEVELS
 } from '../lib/constants'
@@ -22,8 +22,33 @@ export default function AddViolation({ onNavigate }) {
   const [success, setSuccess] = useState(false)
   const [error, setError] = useState(null)
 
+  // Image states
+  const [imageFile, setImageFile] = useState(null)
+  const [imagePreview, setImagePreview] = useState(null)
+  const [imageUrl, setImageUrl] = useState('')
+  const [showUrlInput, setShowUrlInput] = useState(false)
+  const [uploadError, setUploadError] = useState('')
+  const fileRef = useRef()
+
   function set(field, val) {
     setForm(f => ({ ...f, [field]: val }))
+  }
+
+  function handleImageSelect(e) {
+    const file = e.target.files?.[0]
+    if (!file) return
+    setImageFile(file)
+    setImagePreview(URL.createObjectURL(file))
+    setImageUrl('')
+    setUploadError('')
+  }
+
+  function handleRemoveImage() {
+    setImageFile(null)
+    setImagePreview(null)
+    setImageUrl('')
+    setUploadError('')
+    if (fileRef.current) fileRef.current.value = ''
   }
 
   async function handleSubmit(e) {
@@ -34,15 +59,33 @@ export default function AddViolation({ onNavigate }) {
     }
     setSaving(true)
     setError(null)
+    setUploadError('')
     try {
+      // 1. Tạo vi phạm
       const payload = {
         ...form,
         inspection_date: form.inspection_date ? new Date(form.inspection_date).toISOString() : null,
         due_date: form.due_date || null,
       }
-      await createViolation(payload)
+      const created = await createViolation(payload)
+
+      // 2. Upload ảnh nếu có
+      let evidenceUrl = imageUrl.trim() || null
+      if (imageFile && created?.id) {
+        try {
+          evidenceUrl = await uploadEvidenceImage(imageFile, created.id)
+        } catch (uploadErr) {
+          setUploadError('Lưu vi phạm thành công, nhưng upload ảnh thất bại: ' + uploadErr.message)
+        }
+      }
+
+      // 3. Cập nhật evidence_url nếu có ảnh
+      if (evidenceUrl && created?.id) {
+        await updateViolation(created.id, { evidence_url: evidenceUrl })
+      }
+
       setSuccess(true)
-      setTimeout(() => { setSuccess(false); onNavigate('violations') }, 1500)
+      setTimeout(() => { setSuccess(false); onNavigate('violations') }, 1800)
     } catch (err) {
       setError('Lỗi lưu: ' + err.message)
     } finally {
@@ -69,6 +112,12 @@ export default function AddViolation({ onNavigate }) {
       {error && (
         <div className="bg-red-50 border border-red-200 text-red-700 text-sm rounded-xl p-4">
           ⚠️ {error}
+        </div>
+      )}
+
+      {uploadError && (
+        <div className="bg-amber-50 border border-amber-200 text-amber-700 text-sm rounded-xl p-4">
+          ⚠️ {uploadError}
         </div>
       )}
 
@@ -113,7 +162,7 @@ export default function AddViolation({ onNavigate }) {
         <div>
           <label className={labelCls}>⚠️ Chi tiết vi phạm / điểm chưa tuân thủ *</label>
           <textarea
-            className={inputCls}
+            className={`${inputCls} resize-none`}
             value={form.violation_detail}
             onChange={e => set('violation_detail', e.target.value)}
             rows={3}
@@ -132,7 +181,6 @@ export default function AddViolation({ onNavigate }) {
                 <option key={s.value} value={s.value}>{s.label}</option>
               ))}
             </select>
-            {/* Severity visual hint */}
             {form.severity && (
               <div className="mt-1.5">
                 {(() => {
@@ -169,6 +217,94 @@ export default function AddViolation({ onNavigate }) {
             <input type="text" className={inputCls} value={form.recorder}
               placeholder="Tên người ghi nhận"
               onChange={e => set('recorder', e.target.value)} />
+          </div>
+        </div>
+
+        {/* ─── ẢNH BẰNG CHỨNG VI PHẠM ─── */}
+        <div className="border border-slate-200 rounded-xl overflow-hidden">
+          <div className="bg-slate-50 px-4 py-2.5 border-b border-slate-100">
+            <span className="text-xs font-semibold text-slate-600">📸 Ảnh bằng chứng vi phạm</span>
+            <span className="ml-2 text-xs text-slate-400">(tuỳ chọn)</span>
+          </div>
+          <div className="p-4 space-y-3">
+            {/* Preview */}
+            {imagePreview && (
+              <div className="relative inline-block">
+                <img src={imagePreview} alt="Preview"
+                  className="max-h-48 max-w-full rounded-lg border border-slate-200 object-contain bg-slate-50" />
+                <button
+                  type="button"
+                  onClick={handleRemoveImage}
+                  className="absolute -top-2 -right-2 bg-red-500 text-white rounded-full w-5 h-5 flex items-center justify-center text-xs hover:bg-red-600 shadow"
+                >×</button>
+              </div>
+            )}
+
+            {/* URL preview */}
+            {imageUrl && !imagePreview && (
+              <div className="flex items-center gap-2 text-xs bg-green-50 border border-green-200 rounded-lg p-2.5">
+                <span className="text-green-600 font-medium">🔗 URL ảnh đã nhập</span>
+                <span className="text-slate-400 truncate flex-1">{imageUrl}</span>
+                <button type="button" onClick={() => setImageUrl('')}
+                  className="text-red-400 hover:text-red-600 font-bold">×</button>
+              </div>
+            )}
+
+            {/* Action buttons */}
+            {!imagePreview && (
+              <div className="flex flex-wrap gap-2">
+                <button
+                  type="button"
+                  onClick={() => fileRef.current?.click()}
+                  className="flex items-center gap-1.5 bg-white border border-slate-200 text-slate-600 text-xs px-4 py-2 rounded-lg hover:bg-slate-50 transition-colors font-medium"
+                >
+                  📂 Chọn ảnh từ máy
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setShowUrlInput(v => !v)}
+                  className="flex items-center gap-1.5 bg-white border border-slate-200 text-blue-600 text-xs px-4 py-2 rounded-lg hover:bg-blue-50 transition-colors font-medium"
+                >
+                  🔗 Nhập URL ảnh
+                </button>
+                <input ref={fileRef} type="file" accept="image/*" className="hidden"
+                  onChange={handleImageSelect} />
+              </div>
+            )}
+
+            {imagePreview && (
+              <div className="flex flex-wrap gap-2">
+                <button
+                  type="button"
+                  onClick={() => fileRef.current?.click()}
+                  className="text-xs text-blue-600 hover:underline"
+                >Đổi ảnh khác</button>
+                <input ref={fileRef} type="file" accept="image/*" className="hidden"
+                  onChange={handleImageSelect} />
+              </div>
+            )}
+
+            {/* URL input */}
+            {showUrlInput && !imagePreview && (
+              <div className="flex gap-2">
+                <input
+                  type="text"
+                  value={imageUrl}
+                  onChange={e => setImageUrl(e.target.value)}
+                  placeholder="Dán URL ảnh (Google Drive share link, imgur, ...)"
+                  className="flex-1 border border-slate-200 rounded-lg px-3 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-blue-300"
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowUrlInput(false)}
+                  className="bg-blue-600 text-white text-xs px-3 py-1.5 rounded-lg hover:bg-blue-700"
+                >Dùng URL</button>
+              </div>
+            )}
+
+            <div className="text-xs text-slate-400">
+              💡 Hỗ trợ JPG, PNG, WEBP. Google Drive: Upload ảnh → Share → Anyone with link → Copy link
+            </div>
           </div>
         </div>
 
