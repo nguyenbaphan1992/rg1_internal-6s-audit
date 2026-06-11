@@ -45,6 +45,14 @@ const CAP_STYLE = {
   'Đã đóng':    'background:#dcfce7;color:#16a34a',
 }
 
+// ─── CAP STATUS → English label ───────────────────────────────────────────────
+const CAP_EN = {
+  'Chưa xử lý': 'Open',
+  'Đang xử lý': 'In Progress',
+  'Chờ duyệt':  'Pending',
+  'Đã đóng':    'Closed',
+}
+
 // ─── HTML: PAGE 1 — DASHBOARD ─────────────────────────────────────────────────
 function buildDashboardHTML(stats, filterLabel) {
   const now = new Date().toLocaleString('vi-VN')
@@ -158,53 +166,78 @@ function buildDashboardHTML(stats, filterLabel) {
 }
 
 // ─── HTML: PAGE 2 — VIOLATIONS TABLE ─────────────────────────────────────────
+// Bảng A4 portrait: container 794px, padding 2×16px → bảng 762px
+// table-layout:fixed + word-break:break-word để không tràn viền
+// Cột #: 28 | Bộ phận: 58 | Chi tiết: auto | Mức độ: 62 | Ảnh: 78
+//         | Phụ trách: 80 | Hạn: 66 | Trạng thái: 82  → fixed=454 → chi tiết ~308
 function buildViolationsHTML(violations, filterLabel) {
   const now = new Date().toLocaleString('vi-VN')
 
-  const rows = violations.map((v, idx) => {
-    const imgSrc = v.evidence_url || v.image_path || ''
-    const imgCell = imgSrc
-      ? `<img src="${imgSrc}" style="max-width:80px;max-height:60px;object-fit:contain;border-radius:4px;border:1px solid #e2e8f0" crossorigin="anonymous" onerror="this.style.display='none';this.nextSibling.style.display='block'">`
-        + `<span style="display:none;font-size:10px;color:#94a3b8">Không tải được ảnh</span>`
-      : '<span style="color:#94a3b8;font-size:10px">Không có ảnh</span>'
+  // Chung cho mọi td: không cho overflow
+  const TD = 'padding:6px 5px;vertical-align:top;word-break:break-word;overflow-wrap:break-word;line-height:1.4'
 
-    const isOverdue = v.due_date && v.cap_status !== 'Đã đóng' && new Date(v.due_date) < new Date()
+  const rows = violations.map((v, idx) => {
+    // Ưu tiên image_path (ảnh vi phạm gốc), fallback evidence_url
+    const imgSrc = v.image_path || v.evidence_url || ''
+    const imgCell = imgSrc
+      ? `<img src="${imgSrc}" style="max-width:74px;max-height:56px;object-fit:contain;border-radius:3px;border:1px solid #e2e8f0;display:block" crossorigin="anonymous" onerror="this.style.display='none';this.nextSibling.style.display='block'"><span style="display:none;font-size:9px;color:#94a3b8">Không tải được</span>`
+      : '<span style="color:#94a3b8;font-size:9px">Không có</span>'
+
+    const capStatus = v.cap_status || 'Chưa xử lý'
+    const capLabel  = CAP_EN[capStatus] || capStatus
+    const capStyle  = CAP_STYLE[capStatus] || 'background:#f1f5f9;color:#334155'
+
+    const isOverdue = v.due_date && capStatus !== 'Đã đóng' && new Date(v.due_date) < new Date()
     const rowBg = idx % 2 === 0 ? '#ffffff' : '#f8fafc'
 
     return `
-      <tr style="background:${rowBg};border-bottom:1px solid #f1f5f9">
-        <td style="padding:8px;text-align:center;font-weight:600;color:#64748b">${idx + 1}</td>
-        <td style="padding:8px;font-weight:600">${v.department || '—'}</td>
-        <td style="padding:8px;line-height:1.4">${v.violation_detail || '—'}</td>
-        <td style="padding:8px;text-align:center">
-          <span style="padding:2px 8px;border-radius:12px;font-size:10px;font-weight:700;${SEV_STYLE[v.severity] || 'background:#f1f5f9;color:#334155'}">${v.severity || '—'}</span>
+      <tr style="background:${rowBg};border-bottom:1px solid #e2e8f0">
+        <td style="${TD};text-align:center;font-weight:600;color:#94a3b8;font-size:9px">${idx + 1}</td>
+        <td style="${TD};font-weight:600;font-size:10px">${v.department || '—'}</td>
+        <td style="${TD};font-size:10px">${v.violation_detail || '—'}</td>
+        <td style="${TD};text-align:center">
+          <span style="display:inline-block;padding:2px 5px;border-radius:10px;font-size:9px;font-weight:700;${SEV_STYLE[v.severity] || 'background:#f1f5f9;color:#334155'}">${v.severity || '—'}</span>
         </td>
-        <td style="padding:8px;text-align:center">${imgCell}</td>
-        <td style="padding:8px">${v.responsible_dept || v.inspector || '—'}</td>
-        <td style="padding:8px;text-align:center;${isOverdue ? 'color:#dc2626;font-weight:700' : 'color:#64748b'}">${fmtDate(v.due_date)}${isOverdue ? '<br><span style="font-size:9px">⚠️ Quá hạn</span>' : ''}</td>
+        <td style="${TD};text-align:center">${imgCell}</td>
+        <td style="${TD};font-size:10px">${v.responsible_dept || v.inspector || '—'}</td>
+        <td style="${TD};text-align:center;font-size:10px;${isOverdue ? 'color:#dc2626;font-weight:700' : 'color:#475569'}">${fmtDate(v.due_date)}${isOverdue ? '<br><span style="font-size:8px">⚠️ Quá hạn</span>' : ''}</td>
+        <td style="${TD};text-align:center">
+          <span style="display:inline-block;padding:2px 6px;border-radius:10px;font-size:9px;font-weight:700;${capStyle}">${capLabel}</span>
+        </td>
       </tr>`
   }).join('')
 
   return `
-    <div style="font-family:'Segoe UI',Arial,'Helvetica Neue',sans-serif;font-size:11px;color:#1e293b;background:white;padding:0">
+    <div style="font-family:'Segoe UI',Arial,'Helvetica Neue',sans-serif;font-size:10px;color:#1e293b;background:white;padding:0">
       <!-- Header -->
-      <div style="background:#1e3a8a;color:white;padding:16px 20px">
-        <div style="font-size:15px;font-weight:700">DANH SÁCH ĐIỂM CHƯA TUÂN THỦ</div>
-        <div style="font-size:10px;color:#bfdbfe;margin-top:4px">RG1 · ${violations.length} vi phạm · ${now}${filterLabel ? ' · ' + filterLabel : ''}</div>
+      <div style="background:#1e3a8a;color:white;padding:14px 16px">
+        <div style="font-size:14px;font-weight:700;letter-spacing:0.3px">DANH SÁCH ĐIỂM CHƯA TUÂN THỦ</div>
+        <div style="font-size:10px;color:#bfdbfe;margin-top:3px">RG1 · ${violations.length} vi phạm · ${now}${filterLabel ? ' · ' + filterLabel : ''}</div>
       </div>
       <div style="height:3px;background:linear-gradient(to right,#dc2626,#ef4444,#dc2626)"></div>
 
-      <div style="padding:16px 20px">
-        <table style="width:100%;border-collapse:collapse">
+      <div style="padding:14px 16px">
+        <table style="width:100%;border-collapse:collapse;table-layout:fixed">
+          <colgroup>
+            <col style="width:28px">
+            <col style="width:58px">
+            <col><!-- Chi tiết: tự động lấy phần còn lại -->
+            <col style="width:62px">
+            <col style="width:78px">
+            <col style="width:80px">
+            <col style="width:66px">
+            <col style="width:82px">
+          </colgroup>
           <thead>
-            <tr style="background:#1e3a8a;color:white;font-size:11px">
-              <th style="padding:8px 6px;text-align:center;width:32px">#</th>
-              <th style="padding:8px 6px;text-align:left;width:70px">Bộ phận</th>
-              <th style="padding:8px 6px;text-align:left">Chi tiết vi phạm</th>
-              <th style="padding:8px 6px;text-align:center;width:72px">Mức độ</th>
-              <th style="padding:8px 6px;text-align:center;width:90px">Hình ảnh</th>
-              <th style="padding:8px 6px;text-align:left;width:100px">Người phụ trách</th>
-              <th style="padding:8px 6px;text-align:center;width:76px">Hạn xử lý</th>
+            <tr style="background:#1e3a8a;color:white;font-size:10px">
+              <th style="padding:7px 5px;text-align:center">#</th>
+              <th style="padding:7px 5px;text-align:left">Bộ phận</th>
+              <th style="padding:7px 5px;text-align:left">Chi tiết vi phạm</th>
+              <th style="padding:7px 5px;text-align:center">Mức độ</th>
+              <th style="padding:7px 5px;text-align:center">Hình ảnh</th>
+              <th style="padding:7px 5px;text-align:left">Phụ trách</th>
+              <th style="padding:7px 5px;text-align:center">Hạn XL</th>
+              <th style="padding:7px 5px;text-align:center">Trạng thái</th>
             </tr>
           </thead>
           <tbody>${rows}</tbody>
@@ -212,8 +245,8 @@ function buildViolationsHTML(violations, filterLabel) {
       </div>
 
       <!-- Footer -->
-      <div style="background:#f8fafc;border-top:1px solid #e2e8f0;padding:8px 20px;font-size:10px;color:#94a3b8;text-align:center">
-        HSE Monitor · Nhà máy RG1 · Trang 2
+      <div style="background:#f8fafc;border-top:1px solid #e2e8f0;padding:7px 16px;font-size:9px;color:#94a3b8;text-align:center">
+        HSE Monitor · Nhà máy RG1 · Trang 2 trở đi
       </div>
     </div>`
 }
