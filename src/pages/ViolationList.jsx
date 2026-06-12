@@ -416,13 +416,14 @@ function ViolationModal({ violation, onClose }) {
             )}
           </div>
 
-          {/* Ghi chú biện pháp CAP mới nhất */}
-          {latestNote && (
-            <div className="bg-blue-50 border border-blue-100 rounded-xl px-4 py-3">
-              <div className="text-xs font-semibold text-blue-700 mb-1">📝 Ghi chú / mô tả biện pháp</div>
-              <div className="text-sm text-slate-700 italic">"{latestNote}"</div>
-            </div>
-          )}
+          {/* Ghi chú biện pháp CAP mới nhất — luôn hiển thị */}
+          <div className="bg-blue-50 border border-blue-100 rounded-xl px-4 py-3">
+            <div className="text-xs font-semibold text-blue-700 mb-1">📝 Ghi chú / mô tả biện pháp</div>
+            {latestNote
+              ? <div className="text-sm text-slate-700 italic">"{latestNote}"</div>
+              : <div className="text-sm text-slate-400 italic">Chưa có ghi chú</div>
+            }
+          </div>
 
           {/* Ảnh vi phạm gốc */}
           <div className="border border-slate-200 rounded-xl overflow-hidden">
