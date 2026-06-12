@@ -168,8 +168,8 @@ function buildDashboardHTML(stats, filterLabel) {
 // ─── HTML: PAGE 2 — VIOLATIONS TABLE ─────────────────────────────────────────
 // Bảng A4 portrait: container 794px, padding 2×16px → bảng 762px
 // table-layout:fixed + word-break:break-word để không tràn viền
-// Cột #: 28 | Bộ phận: 58 | Chi tiết: auto | Mức độ: 62 | Ảnh: 78
-//         | Phụ trách: 80 | Hạn: 66 | Trạng thái: 82  → fixed=454 → chi tiết ~308
+// 9 cột: # | Bộ phận | Chi tiết (auto) | Mức độ | Ảnh | Phụ trách | Hạn | Trạng thái | Hành động KP
+// Fixed: 22+50+54+62+68+56+68+120 = 500 → Chi tiết ~262px
 function buildViolationsHTML(violations, filterLabel) {
   const now = new Date().toLocaleString('vi-VN')
 
@@ -180,12 +180,18 @@ function buildViolationsHTML(violations, filterLabel) {
     // Ưu tiên image_path (ảnh vi phạm gốc), fallback evidence_url
     const imgSrc = v.image_path || v.evidence_url || ''
     const imgCell = imgSrc
-      ? `<img src="${imgSrc}" style="max-width:74px;max-height:56px;object-fit:contain;border-radius:3px;border:1px solid #e2e8f0;display:block" crossorigin="anonymous" onerror="this.style.display='none';this.nextSibling.style.display='block'"><span style="display:none;font-size:9px;color:#94a3b8">Không tải được</span>`
+      ? `<img src="${imgSrc}" style="max-width:60px;max-height:50px;object-fit:contain;border-radius:3px;border:1px solid #e2e8f0;display:block" crossorigin="anonymous" onerror="this.style.display='none';this.nextSibling.style.display='block'"><span style="display:none;font-size:9px;color:#94a3b8">Không tải được</span>`
       : '<span style="color:#94a3b8;font-size:9px">Không có</span>'
 
     const capStatus = v.cap_status || 'Chưa xử lý'
     const capLabel  = CAP_EN[capStatus] || capStatus
     const capStyle  = CAP_STYLE[capStatus] || 'background:#f1f5f9;color:#334155'
+
+    // Lấy ghi chú mới nhất từ cap_updates
+    const capUpdates = Array.isArray(v.cap_updates) ? v.cap_updates : []
+    const latestNote = [...capUpdates]
+      .sort((a, b) => new Date(b.created_at) - new Date(a.created_at))
+      .find(h => h.note)?.note || '—'
 
     const isOverdue = v.due_date && capStatus !== 'Đã đóng' && new Date(v.due_date) < new Date()
     const rowBg = idx % 2 === 0 ? '#ffffff' : '#f8fafc'
@@ -204,6 +210,7 @@ function buildViolationsHTML(violations, filterLabel) {
         <td style="${TD};text-align:center">
           <span style="display:inline-block;padding:2px 6px;border-radius:10px;font-size:9px;font-weight:700;${capStyle}">${capLabel}</span>
         </td>
+        <td style="${TD};font-size:9px;color:#334155">${latestNote}</td>
       </tr>`
   }).join('')
 
@@ -219,14 +226,15 @@ function buildViolationsHTML(violations, filterLabel) {
       <div style="padding:14px 16px">
         <table style="width:100%;border-collapse:collapse;table-layout:fixed">
           <colgroup>
-            <col style="width:28px">
-            <col style="width:58px">
-            <col><!-- Chi tiết: tự động lấy phần còn lại -->
+            <col style="width:22px">
+            <col style="width:50px">
+            <col><!-- Chi tiết: tự động lấy phần còn lại ~262px -->
+            <col style="width:54px">
             <col style="width:62px">
-            <col style="width:78px">
-            <col style="width:80px">
-            <col style="width:66px">
-            <col style="width:82px">
+            <col style="width:68px">
+            <col style="width:56px">
+            <col style="width:68px">
+            <col style="width:120px">
           </colgroup>
           <thead>
             <tr style="background:#1e3a8a;color:white;font-size:10px">
@@ -238,6 +246,7 @@ function buildViolationsHTML(violations, filterLabel) {
               <th style="padding:7px 5px;text-align:left">Phụ trách</th>
               <th style="padding:7px 5px;text-align:center">Hạn XL</th>
               <th style="padding:7px 5px;text-align:center">Trạng thái</th>
+              <th style="padding:7px 5px;text-align:left">Hành động khắc phục</th>
             </tr>
           </thead>
           <tbody>${rows}</tbody>
