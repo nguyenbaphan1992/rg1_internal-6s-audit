@@ -8,7 +8,7 @@ import { parseSeverity, GSHEET_ID, GSHEET_GID } from './constants'
 export async function fetchViolations({ department, severity, capStatus, month, year } = {}) {
   let query = supabase
     .from('violations')
-    .select('*')
+    .select('*, cap_updates(*)')
     .order('inspection_date', { ascending: false })
 
   if (department && department !== 'all') {
