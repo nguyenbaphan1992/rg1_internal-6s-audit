@@ -1,7 +1,7 @@
 // Danh sách bộ phận nhà máy RG1
 export const RG1_DEPARTMENTS = [
   '1U01', '1U02', '1U03', '1U04', '1U05', '1U06',
-  '1K01', '1W01', '1MT1',
+  '1K01', '1W01', '1WH1', '1MT1',
   'Canteen', 'Dorm', 'Public_area'
 ]
 
