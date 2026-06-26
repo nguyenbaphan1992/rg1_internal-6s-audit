@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react'
-import { fetchViolations, updateCapStatus, updateViolation, deleteViolation, uploadEvidenceImage, resolveGDriveImageUrl } from '../lib/api'
+import { fetchViolations, fetchViolationById, updateCapStatus, updateViolation, deleteViolation, uploadEvidenceImage, resolveGDriveImageUrl } from '../lib/api'
 import {
   RG1_DEPARTMENTS, INSPECTION_CATEGORIES, SEVERITY_LEVELS, CAP_STATUSES,
   getSeverityConfig, getCapStatusConfig
@@ -562,6 +562,26 @@ export default function ViolationList({ role = 'guest' }) {
   const [editing, setEditing] = useState(null)        // edit modal
   const [deleting, setDeleting] = useState(null)      // delete modal
   const [exporting, setExporting] = useState(null)    // 'pdf' | 'excel' | null
+  const [loadingModal, setLoadingModal] = useState(false) // lazy fetch modal
+
+  // Lazy load: chỉ fetch cap_updates khi mở modal
+  async function handleOpenView(v) {
+    setLoadingModal(true)
+    try {
+      const full = await fetchViolationById(v.id)
+      setSelected(full)
+    } catch { setSelected(v) } // fallback
+    finally { setLoadingModal(false) }
+  }
+
+  async function handleOpenEdit(v) {
+    setLoadingModal(true)
+    try {
+      const full = await fetchViolationById(v.id)
+      setEditing(full)
+    } catch { setEditing(v) }
+    finally { setLoadingModal(false) }
+  }
   const now = new Date()
 
   const [filters, setFilters] = useState({
@@ -740,13 +760,13 @@ export default function ViolationList({ role = 'guest' }) {
                         <td className="text-center px-3 py-3">
                           <div className="flex items-center justify-center gap-1">
                             <button
-                              onClick={() => setSelected(v)}
+                              onClick={() => handleOpenView(v)}
                               title="Xem chi tiết"
                               className="px-2 py-1 text-blue-600 hover:bg-blue-50 rounded-lg transition-colors font-medium"
                             >👁</button>
                             {canEdit && (
                               <button
-                                onClick={() => setEditing(v)}
+                                onClick={() => handleOpenEdit(v)}
                                 title="Chỉnh sửa"
                                 className="px-2 py-1 text-amber-600 hover:bg-amber-50 rounded-lg transition-colors font-medium"
                               >✏️</button>
@@ -800,12 +820,12 @@ export default function ViolationList({ role = 'guest' }) {
                   {/* Mobile action buttons */}
                   <div className="flex gap-2 pt-2 border-t border-slate-100">
                     <button
-                      onClick={() => setSelected(v)}
+                      onClick={() => handleOpenView(v)}
                       className="flex-1 py-1.5 text-xs text-blue-600 border border-blue-200 rounded-lg hover:bg-blue-50 transition-colors font-medium"
                     >👁 Xem</button>
                     {canEdit && (
                       <button
-                        onClick={() => setEditing(v)}
+                        onClick={() => handleOpenEdit(v)}
                         className="flex-1 py-1.5 text-xs text-amber-600 border border-amber-200 rounded-lg hover:bg-amber-50 transition-colors font-medium"
                       >✏️ Sửa</button>
                     )}
@@ -827,6 +847,16 @@ export default function ViolationList({ role = 'guest' }) {
             )}
           </div>
         </>
+      )}
+
+      {/* LOADING OVERLAY khi đang fetch modal */}
+      {loadingModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30">
+          <div className="bg-white rounded-xl px-6 py-4 shadow-xl flex items-center gap-3">
+            <span className="animate-spin text-xl">⚙️</span>
+            <span className="text-sm text-slate-600 font-medium">Đang tải...</span>
+          </div>
+        </div>
       )}
 
       {/* VIEW MODAL */}
